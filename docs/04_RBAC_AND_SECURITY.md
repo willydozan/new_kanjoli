@@ -1,1333 +1,588 @@
 # E-KANJOLI — RBAC AND SECURITY
+## Version 1.2 — Updated Baseline
 
-> Status: APPROVED BASELINE  
-> Version: 1.0  
-> Last Updated: 2026-08-14  
-> Institution: Bappeda & Litbang Kabupaten Banggai Kepulauan  
-> Related Documents:
-> - `00_PROJECT_CHARTER.md`
-> - `01_PRD.md`
-> - `02_SYSTEM_ARCHITECTURE.md`
-> - `03_DATABASE_SCHEMA.md`
+> Security model: Supabase Auth + RBAC + organizational hierarchy + RLS.
 
 ---
 
-# 1. TUJUAN
+# 1. Core Security Principle
 
-Dokumen ini menetapkan aturan **Role-Based Access Control (RBAC)**, authorization, keamanan aplikasi, keamanan database, keamanan storage, auditability, dan prinsip least privilege untuk E-KANJOLI.
+E-KANJOLI MUST NOT rely on frontend role checks as the primary security mechanism.
 
-Semua implementasi aplikasi harus mengikuti dokumen ini.
-
-AI coding agent **tidak boleh mengubah aturan akses, role, permission, RLS, atau alur approval bisnis secara sepihak**.
-
-Jika kebutuhan baru bertentangan dengan dokumen ini, perubahan harus dilakukan melalui perubahan PRD/dokumen baseline terlebih dahulu.
-
----
-
-# 2. PRINSIP KEAMANAN
-
-E-KANJOLI menggunakan prinsip:
-
-1. Secure by Design
-2. Defense in Depth
-3. Least Privilege
-4. Role-Based Access Control
-5. Database-Level Authorization
-6. Separation of Duties
-7. Explicit Permission
-8. Fail Closed
-9. Auditability
-10. Traceability
-11. Data Integrity
-12. Secure File Access
-13. Secure Session Management
-14. Input Validation
-15. Output Encoding
-16. No Trust in Client-Side Authorization
-
----
-
-# 3. ROLE RESMI
-
-Role resmi sistem:
+Authorization layers:
 
 ```text
-superadmin
-admin_pekppp
-admin_perencanaan
-admin_litbang
-admin_sekretariat
-pimpinan
-```
-
-Portal publik tidak menggunakan role internal.
-
-Public user hanya dapat mengakses fungsi publik yang memang disediakan tanpa memperoleh akses ke dashboard internal.
-
----
-
-# 4. DEFINISI ROLE
-
-## 4.1 superadmin
-
-Administrator sistem.
-
-Tanggung jawab:
-
-- Manajemen user
-- Manajemen role
-- Konfigurasi sistem
-- Konfigurasi master data
-- Monitoring audit log
-- Administrasi storage
-- Backup dan recovery
-- Konfigurasi keamanan teknis
-
-Batasan:
-
-- Tidak boleh mengubah data bisnis tanpa kebutuhan administratif.
-- Setiap tindakan sensitif harus tercatat pada audit log.
-
----
-
-## 4.2 admin_pekppp
-
-Tim evaluator internal PEKPPP.
-
-Tanggung jawab:
-
-- Kuesioner evaluasi PEKPPP
-- Form F01
-- Aspek evaluasi
-- Bukti dukung
-- Verifikasi data evaluasi
-- Persiapan data evaluasi eksternal
-
-Tidak memiliki akses administratif terhadap modul umum kantor kecuali permission khusus yang diberikan.
-
----
-
-## 4.3 admin_perencanaan
-
-Admin Bidang Perencanaan.
-
-Mengelola:
-
-1. Permohonan data dan informasi pembangunan daerah
-2. Asistensi/fasilitasi Renstra/Renja
-3. Asistensi e-Monev
-4. Musrenbang RKPD/RPJMD
-5. Pokir DPRD
-6. Dokumen perencanaan yang menjadi kewenangannya
-
----
-
-## 4.4 admin_litbang
-
-Admin Bidang Litbang.
-
-Mengelola:
-
-1. Rekomendasi/izin penelitian daerah
-2. Fasilitasi inovasi dan kelitbangan
-3. TJSLP/CSR
-4. Pengkajian, pengembangan dan penerapan teknologi daerah
-5. Dokumen kelitbangan yang menjadi kewenangannya
-
----
-
-## 4.5 admin_sekretariat
-
-Admin Sekretariat.
-
-Mengelola:
-
-- Surat masuk
-- Surat keluar
-- Registrasi surat
-- e-Disposisi
-- Perjalanan dinas
-- SPT
-- SPPD
-- Laporan perjalanan
-- Daftar aset
-- Arsip dokumen
-- RENJA
-- RKPD
-- Administrasi sekretariat
-- Layanan PPID/Pengaduan
-- Notifikasi administrasi
-
----
-
-## 4.6 pimpinan
-
-Pimpinan/pejabat yang berwenang.
-
-Default access:
-
-- Read-only dashboard
-- Monitoring seluruh bidang
-- Monitoring layanan
-- Monitoring surat
-- Monitoring disposisi
-- Monitoring perjalanan dinas
-- Monitoring aset
-- Monitoring PEKPPP
-- Monitoring kinerja
-
-Action khusus:
-
-- Approval yang secara bisnis memang membutuhkan persetujuan pimpinan
-- Memberikan keputusan/approval
-- Ekspor laporan
-
-Pimpinan tidak memperoleh hak konfigurasi sistem.
-
----
-
-# 5. ACCESS MODEL
-
-Model authorization:
-
-```text
-User
-  ↓
-Authenticated Session
-  ↓
-User Role
-  ↓
+Supabase Auth
+      |
+      v
+Authenticated User
+      |
+      v
+Employee Profile
+      |
+      v
+Application Role
+      |
+      v
+Position / Organizational Hierarchy
+      |
+      v
 Permission
-  ↓
-Resource
-  ↓
-Action
-  ↓
-Database RLS / Server Authorization
+      |
+      v
+PostgreSQL RLS
 ```
 
-Client-side route guard hanya berfungsi sebagai UX.
+Frontend checks improve UX.
 
-**Security enforcement wajib berada di server/database.**
+RLS provides actual data protection.
 
 ---
 
-# 6. ACTION MODEL
+# 2. Mandatory Login
 
-Action standar:
+Every active employee MUST have an individual login.
+
+There is no shared employee account.
+
+Example:
 
 ```text
-view
-list
-create
-update
-delete
-submit
-verify
-approve
-reject
-assign
-disposition
-upload
-download
-export
-archive
-restore
-manage
-configure
+Kepala Badan -> personal account
+Sekretaris -> personal account
+Kepala Bidang -> personal account
+Fungsional -> personal account
+Staff -> personal account
 ```
 
-Tidak semua role memperoleh seluruh action.
+This is mandatory because the system records:
+
+- who received an instruction
+- who executed it
+- who changed its status
+- who approved it
+- who uploaded a document
+- who created a disposition
+- who completed a task
+- who exported a report
+
+Shared credentials would destroy accountability.
 
 ---
 
-# 7. PERMISSION MATRIX UTAMA
+# 3. Authentication
 
-| Modul | Superadmin | Sekretariat | Perencanaan | Litbang | PEKPPP | Pimpinan |
-|---|---|---|---|---|---|---|
-| User Management | CRUD | - | - | - | - | - |
-| System Config | CRUD | - | - | - | - | - |
-| Surat Masuk | Admin | CRUD | View terkait | View terkait | - | View/Approve |
-| Surat Keluar | Admin | CRUD | View terkait | View terkait | - | View/Approve |
-| e-Disposisi | Admin | CRUD/Assign | Receive/Process | Receive/Process | - | Approve/View |
-| Perjalanan Dinas | Admin | CRUD | View terkait | View terkait | - | Approve/View |
-| Aset | Admin | CRUD | View | View | - | View |
-| Arsip | Admin | CRUD | Manage bidang | Manage bidang | View bukti | View |
-| RENJA | Admin | Manage | CRUD bidang | View | - | View |
-| RKPD | Admin | Manage | CRUD bidang | View | - | View |
-| Layanan Publik | Admin | PPID | CRUD bidang | CRUD bidang | - | View/Approve |
-| PEKPPP | Admin | - | - | - | CRUD | View |
-| Dashboard | Full | Sekretariat | Bidang | Bidang | PEKPPP | Full |
-| Audit Log | Full | View terbatas | View terbatas | View terbatas | View terkait | View |
-| Reporting | Full | Create | Create | Create | Create | Export/Full |
+Supabase Auth is the authentication authority.
 
-Keterangan:
-
-- `CRUD` = create, read, update, delete sesuai batas modul
-- `View` = read-only
-- `View terkait` = hanya data yang relevan dengan kewenangan
-- `Full` = sesuai otorisasi administratif
-- `-` = tidak memiliki akses
-
----
-
-# 8. FIELD-LEVEL AND DATA-SCOPE SECURITY
-
-Selain role, beberapa data harus dibatasi berdasarkan scope.
-
-Contoh:
+Recommended:
 
 ```text
-admin_perencanaan
-    → hanya permohonan layanan bidang perencanaan
-
-admin_litbang
-    → hanya permohonan layanan bidang litbang
-
-admin_sekretariat
-    → administrasi sekretariat + PPID
-
-admin_pekppp
-    → data PEKPPP
-
-pimpinan
-    → lintas bidang dalam mode monitoring
+Email/password
 ```
 
-Jangan memberikan seluruh tabel kepada role hanya karena role tersebut dapat membuka modul tertentu.
-
----
-
-# 9. SUPABASE ROW LEVEL SECURITY
-
-Semua tabel yang mengandung data sensitif atau internal wajib menggunakan RLS.
-
-Minimal:
-
-```sql
-ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;
-```
-
-Policy harus menggunakan identitas user yang telah terautentikasi.
-
-Jangan mengandalkan:
+Future options:
 
 ```text
-localStorage.role
-React state
-hidden menu
-URL protection
-frontend condition
+SSO
+OTP
+institutional identity provider
 ```
 
-sebagai security boundary.
+Passwords MUST NOT be stored in application tables.
 
 ---
 
-# 10. ROLE HELPER
+# 4. Employee Account Lifecycle
 
-Direkomendasikan memiliki helper database/server untuk membaca role user.
-
-Contoh konseptual:
-
-```sql
-auth_user_role()
-```
-
-atau mekanisme equivalent yang aman.
-
-Implementasi final harus menghindari recursion pada RLS.
-
----
-
-# 11. SUPERADMIN SECURITY
-
-Superadmin adalah role paling sensitif.
-
-Akses:
-
-- User management
-- Role assignment
-- Configuration
-- Audit
-- Storage administration
-- System maintenance
-
-Ketentuan:
-
-1. Tidak boleh ada privilege escalation melalui frontend.
-2. Role tidak boleh dapat diubah oleh user biasa.
-3. Perubahan role harus tercatat.
-4. Penghapusan user harus aman terhadap data historis.
-5. User terakhir dengan akses administratif tidak boleh terhapus secara tidak sengaja.
-6. Sensitive actions wajib masuk audit log.
-
----
-
-# 12. USER MANAGEMENT
-
-Superadmin dapat:
-
-- Membuat user
-- Mengaktifkan user
-- Menonaktifkan user
-- Mengubah role
-- Mengubah metadata yang diizinkan
-
-Sistem harus mempertahankan:
+## Provisioning
 
 ```text
-created_by
-updated_by
-created_at
-updated_at
+Employee master created
+        |
+        v
+Auth account created
+        |
+        v
+Profile linked
+        |
+        v
+Role assigned
+        |
+        v
+Position assigned
+        |
+        v
+Organizational unit assigned
+        |
+        v
+Account activated
 ```
 
-Jika user dinonaktifkan, histori transaksi tetap dipertahankan.
+## Deactivation
 
-Jangan melakukan hard delete terhadap user yang memiliki histori bisnis kecuali ada prosedur khusus.
-
----
-
-# 13. AUTHENTICATION
-
-Authentication menggunakan Supabase Auth atau mekanisme resmi yang disepakati arsitektur.
-
-Minimal:
-
-- Email/password atau identity provider resmi
-- Session management
-- Logout
-- Password reset
-- Account activation
-- Account deactivation
-
-Jangan menyimpan password sendiri di tabel aplikasi.
-
----
-
-# 14. AUTHORIZATION
-
-Authorization harus diverifikasi pada:
-
-1. Route
-2. API/server action
-3. Database/RLS
-4. Storage policy
-
-Route protection hanya lapisan tambahan.
-
-Contoh:
+When an employee leaves/transfers:
 
 ```text
-User membuka /admin/perencanaan
-        ↓
-Route guard
-        ↓
-Server authorization
-        ↓
-Database RLS
-        ↓
-Data
+is_active = false
 ```
 
----
+Do not delete historical transactions.
 
-# 15. PUBLIC PORTAL SECURITY
-
-Portal publik boleh:
-
-- Melihat katalog layanan
-- Mengirim permohonan
-- Melacak tiket
-- Melihat informasi publik
-
-Portal publik tidak boleh:
-
-- Membaca tabel internal
-- Membaca audit log
-- Membaca surat internal
-- Membaca disposisi
-- Membaca data user
-- Mengakses storage internal
-- Mengakses data PEKPPP
-- Mengakses dashboard pimpinan
-
-Tracking tiket harus membatasi informasi berdasarkan token/ticket credential yang sesuai.
+Historical records remain attributable to the employee.
 
 ---
 
-# 16. SERVICE REQUEST SECURITY
+# 5. Application Roles
 
-Nomor tiket bukan satu-satunya rahasia.
-
-Jika tracking publik membutuhkan informasi pribadi, sistem sebaiknya menggunakan:
+Official roles:
 
 ```text
-ticket_number + verification token
-```
-
-atau mekanisme verifikasi lain.
-
-Jangan menampilkan:
-
-- detail internal
-- catatan disposisi internal
-- data pegawai
-- dokumen rahasia
-- komentar internal
-
-kepada pemohon publik.
-
----
-
-# 17. SURAT MASUK SECURITY
-
-Surat masuk memiliki informasi administratif dan dokumen yang dapat bersifat internal.
-
-Access:
-
-```text
-admin_sekretariat
-    → create/read/update/register
-
-pimpinan
-    → view/approval sesuai workflow
-
-bidang tujuan
-    → hanya surat yang didisposisikan/ditujukan
-
+pegawai
 superadmin
-    → administrative access
-
-public
-    → none
+admin_pekppp
+admin_perencanaan
+admin_litbang
+admin_sekretariat
+pimpinan
 ```
 
-Dokumen surat tidak boleh menjadi public bucket.
+## `pegawai`
+
+Default role for ordinary employees.
+
+May include:
+
+- Fungsional
+- Staff
+- Kepala Sub Bagian
+- Kepala Bidang
+- Sekretaris
+
+Organizational authority comes from position, not from renaming the role.
+
+## `pimpinan`
+
+Used for Kepala Badan.
+
+## `admin_*`
+
+Domain administration roles.
+
+## `superadmin`
+
+Technical/system administration only.
+
+Superadmin MUST NOT automatically become business approver.
 
 ---
 
-# 18. SURAT KELUAR SECURITY
+# 6. Position-Based Authority
 
-Surat keluar harus mendukung workflow:
+Position is separate from role.
+
+Example:
 
 ```text
-Draft
-  ↓
-Review
-  ↓
-Approval
-  ↓
-Nomor Surat
-  ↓
-Final
-  ↓
-Arsip
+role = pegawai
+position = kepala_bidang
 ```
 
-Dokumen final harus memiliki histori perubahan.
+This employee may issue tasks to subordinates because the position grants that authority.
 
-Setelah surat final diterbitkan, perubahan terhadap dokumen final harus dibatasi.
+Likewise:
+
+```text
+role = pegawai
+position = fungsional
+```
+
+does not grant authority to issue instructions merely because the user is authenticated.
 
 ---
 
-# 19. e-DISPOSISI SECURITY
+# 7. Organizational Hierarchy
 
-Disposisi merupakan data internal.
-
-Informasi disposisi minimal:
+Initial hierarchy:
 
 ```text
-surat
-pemberi disposisi
-penerima disposisi
-instruksi
-deadline
-status
-waktu
+Kepala Badan
+│
+├── Sekretaris
+│   ├── Kasubbag Umum dan Kepegawaian
+│   └── Kasubbag Aset dan Keuangan
+│
+├── Kabid Perencanaan Makro
+├── Kabid Perencanaan Sosial Budaya
+├── Kabid Perencanaan Ekonomi
+├── Kabid Perencanaan Fisik dan Prasarana
+└── Kabid Penelitian dan Pengembangan
 ```
 
-Hanya pihak terkait yang boleh membaca instruksi disposisi.
+Each Kepala Bidang has:
 
-Admin sekretariat tidak boleh mengubah keputusan pimpinan tanpa permission khusus.
+```text
+Fungsional
+Staff
+```
+
+Secretariat has:
+
+```text
+Kasubbag
+Staff
+```
+
+The hierarchy is stored in database records, not hard-coded in React.
 
 ---
 
-# 20. PERJALANAN DINAS SECURITY
+# 8. Permission Model
 
-Data perjalanan dinas mencakup:
+Permissions are granular.
 
-- SPT
-- SPPD
-- Pegawai
-- tujuan
-- tanggal
-- laporan
-
-Workflow:
+Examples:
 
 ```text
-Draft
-→ Review
-→ Approval
-→ Issued
-→ Completed
-→ Reported
-→ Archived
-```
+task.view
+task.create
+task.assign
+task.execute
+task.update
+task.complete
+task.approve
 
-Approval harus tercatat.
+disposition.view
+disposition.create
+disposition.assign
+disposition.execute
+
+letter.view
+letter.create
+letter.approve
+letter.archive
+
+travel.view
+travel.propose
+travel.approve
+travel.execute
+
+service.view
+service.manage
+service.approve
+
+document.view
+document.create
+document.update
+document.archive
+
+report.view
+report.export
+
+audit.view
+
+user.manage
+role.manage
+```
 
 ---
 
-# 21. ASSET SECURITY
+# 9. Scope-Based Access
 
-Data aset hanya boleh diubah oleh role yang memiliki kewenangan.
+Permission alone is insufficient.
 
-Audit perubahan harus menyimpan:
+A user may have permission but only within an allowed scope.
+
+Possible scopes:
 
 ```text
-asset_id
-old_value
-new_value
-changed_by
-changed_at
-reason
+own
+subordinates
+unit
+assigned_service
+all
 ```
 
-Jika aset dinyatakan dihapus/dipindahtangankan, gunakan status/soft-delete bila diperlukan untuk menjaga histori.
+Example:
+
+```text
+task.assign + scope=subordinates
+```
+
+means the user may assign work to employees in the permitted subordinate tree.
 
 ---
 
-# 22. DOCUMENT MANAGEMENT SECURITY
+# 10. Task Authorization
 
-Dokumen diklasifikasikan minimal:
+## Kepala Badan
 
-```text
-PUBLIC
-INTERNAL
-RESTRICTED
-CONFIDENTIAL
-```
+Can:
 
-Setiap dokumen harus memiliki access scope.
+- issue tasks
+- assign tasks
+- monitor tasks
+- view organization-wide workload
+- approve relevant workflows
 
-Contoh:
+## Sekretaris / Kepala Bidang
 
-```text
-document.visibility
-document.owner_unit
-document.related_module
-document.access_scope
-```
+Can:
 
-Jangan menyimpan dokumen sensitif pada public storage bucket.
+- issue tasks within authorized hierarchy
+- assign tasks to subordinates
+- monitor subordinate tasks
+- report upward
 
----
+## Fungsional / Staff
 
-# 23. STORAGE SECURITY
+Can:
 
-Gunakan private bucket untuk dokumen internal.
+- receive tasks
+- execute tasks
+- update progress
+- upload evidence
+- complete assigned work
 
-Akses file menggunakan signed URL atau mekanisme authorization yang setara.
-
-Jangan:
-
-- Menaruh credential di frontend
-- Membuat bucket internal menjadi public
-- Membuat service role key tersedia di browser
-- Menyimpan secret dalam Git
+They cannot arbitrarily assign work to others unless separately authorized.
 
 ---
 
-# 24. ENVIRONMENT VARIABLES
+# 11. Disposition Security
 
-Contoh:
+Disposition may be created only by authorized officials.
 
-```text
-VITE_SUPABASE_URL
-VITE_SUPABASE_ANON_KEY
-```
+Recipient can:
 
-Secret server-side tidak boleh diberi prefix `VITE_`.
+- view assigned disposition
+- acknowledge
+- execute
+- update progress
+- attach evidence
 
-Jangan commit:
+Recipient cannot change the issuer.
 
-```text
-.env
-.env.local
-.env.production
-service_role_key
-private_key
-credentials
-```
-
-Gunakan:
-
-```text
-.env.example
-```
-
-untuk dokumentasi konfigurasi.
+History is immutable.
 
 ---
 
-# 25. SERVICE ROLE KEY
+# 12. Travel Security
 
-Supabase service role key:
+Important rule:
 
-- hanya server-side
-- tidak boleh dikirim ke browser
-- tidak boleh masuk Git
-- tidak boleh ditampilkan pada log
-- tidak boleh disimpan pada source code
+```text
+travel.propose != travel.execute
+```
+
+Fungsional and Staff:
+
+```text
+cannot independently propose
+can execute when officially instructed
+```
+
+Kepala Bidang / Sekretaris / Kepala Badan:
+
+```text
+can propose according to workflow
+can execute
+```
+
+Approval remains a separate authority.
 
 ---
 
-# 26. AUDIT LOG
+# 13. Public Service Security
 
-Action sensitif wajib diaudit.
+Each of the ten public services has a service administrator.
 
-Minimal:
+A service administrator:
 
 ```text
-id
-actor_user_id
-actor_role
+CAN:
+- view requests for assigned service
+- process requests
+- update service workflow
+- generate service reports
+
+CANNOT:
+- access unrelated service administration
+- change system roles
+- modify audit logs
+```
+
+---
+
+# 14. RLS Strategy
+
+RLS MUST be enabled for sensitive tables.
+
+Examples:
+
+```text
+employees
+profiles
+user_roles
+tasks
+task_assignments
+dispositions
+letters
+travel_orders
+documents
+service_requests
+notifications
+audit_logs
+```
+
+Policies should use secure database helper functions such as:
+
+```text
+auth.uid()
+current_employee_id()
+has_role()
+has_permission()
+is_superadmin()
+is_superior_of()
+can_access_service()
+```
+
+These functions MUST be carefully designed to avoid recursive RLS evaluation.
+
+---
+
+# 15. Employee Access
+
+An employee can normally read:
+
+```text
+own profile
+own tasks
+own dispositions
+own notifications
+own travel records
+own activity history
+```
+
+An employee can access subordinate data only when organizational authority permits it.
+
+---
+
+# 16. Management Access
+
+Kepala Badan can access organization-wide operational dashboards.
+
+Sekretaris and Kepala Bidang can access records within their authorized organizational scope.
+
+Superadmin has technical administration access, but business-sensitive actions remain governed by business permissions.
+
+---
+
+# 17. Audit Security
+
+Audit logs are append-only.
+
+No normal application user may:
+
+```text
+UPDATE audit_logs
+DELETE audit_logs
+```
+
+Audit events should capture:
+
+```text
+actor
 action
-module
-resource_type
-resource_id
-old_data
-new_data
-ip_address
-user_agent
-created_at
-```
-
-Audit log harus append-oriented.
-
-User biasa tidak boleh menghapus audit log.
-
----
-
-# 27. ACTION YANG WAJIB DIAUDIT
-
-Minimal:
-
-- Login
-- Logout
-- Failed login
-- User creation
-- User role change
-- User deactivation
-- Permission change
-- Data creation
-- Data update
-- Data deletion
-- Approval
-- Rejection
-- Disposition
-- Document upload
-- Document deletion
-- Document download untuk dokumen sensitif
-- Export
-- Configuration change
-
----
-
-# 28. SEPARATION OF DUTIES
-
-Untuk proses penting:
-
-```text
-Creator ≠ Approver
-```
-
-Contoh:
-
-Admin membuat draft surat.
-
-Pihak berwenang melakukan approval.
-
-Admin tidak boleh secara otomatis memberikan approval atas nama pimpinan.
-
-Konfigurasi final harus mengikuti kewenangan organisasi.
-
----
-
-# 29. APPROVAL SECURITY
-
-Approval harus menyimpan:
-
-```text
-approved_by
-approved_at
-approval_status
-approval_note
-```
-
-Approval tidak boleh hanya direpresentasikan oleh:
-
-```text
-status = APPROVED
-```
-
-tanpa identitas aktor.
-
----
-
-# 30. STATUS TRANSITION SECURITY
-
-Status harus memiliki transition rules.
-
-Contoh:
-
-```text
-DRAFT → SUBMITTED
-SUBMITTED → REVIEW
-REVIEW → APPROVED
-REVIEW → REJECTED
-APPROVED → COMPLETED
-COMPLETED → ARCHIVED
-```
-
-Jangan mengizinkan frontend mengubah status ke nilai apa pun tanpa validasi server.
-
----
-
-# 31. FILE UPLOAD SECURITY
-
-Upload harus memvalidasi:
-
-- MIME type
-- extension
-- file size
-- filename
-- storage path
-- authorization
-
-Gunakan filename yang aman dan unik.
-
-Jangan mempercayai filename dari user.
-
----
-
-# 32. INPUT VALIDATION
-
-Semua input harus divalidasi.
-
-Validasi:
-
-```text
-required fields
-format
-length
-enum
-UUID
-date
-email
-phone
-file
-numeric ranges
-```
-
-Gunakan schema validation pada server.
-
----
-
-# 33. XSS / INJECTION
-
-Semua data user dianggap tidak terpercaya.
-
-Perlindungan wajib terhadap:
-
-- XSS
-- SQL injection
-- HTML injection
-- command injection
-- path traversal
-- malicious file upload
-
-Gunakan parameterized query dan library resmi.
-
-Jangan membuat SQL melalui string concatenation dari input user.
-
----
-
-# 34. CSRF / SESSION
-
-Gunakan mekanisme session dan cookie/token yang aman sesuai arsitektur.
-
-Jangan membuat authentication sendiri.
-
-Logout harus membatalkan session sesuai mekanisme provider.
-
----
-
-# 35. ERROR HANDLING
-
-Error yang ditampilkan ke publik tidak boleh membocorkan:
-
-- SQL
-- stack trace
-- secret
-- internal path
-- database structure
-- token
-- credential
-
-Detail error hanya boleh tersedia pada server log yang aman.
-
----
-
-# 36. LOGGING
-
-Log aplikasi harus menghindari:
-
-- password
-- access token
-- refresh token
-- service role key
-- secret
-- dokumen sensitif
-- data pribadi yang tidak diperlukan
-
----
-
-# 37. RATE LIMITING
-
-Endpoint publik yang berisiko disalahgunakan harus memiliki rate limiting.
-
-Minimal:
-
-- login
-- password reset
-- public ticket lookup
-- public service submission
-- upload
-- notification endpoint
-
----
-
-# 38. DATA PRIVACY
-
-Data pemohon harus diperlakukan sebagai data terbatas sesuai kebutuhan layanan.
-
-Jangan menampilkan nomor telepon/email lengkap pada dashboard publik.
-
-Dashboard publik hanya menampilkan informasi yang memang bersifat publik.
-
----
-
-# 39. EXPORT SECURITY
-
-Export hanya tersedia bagi role yang memiliki permission.
-
-Export harus dicatat:
-
-```text
-exported_by
-export_type
-module
-filter
+entity
+before
+after
 timestamp
 ```
 
-Jika mengandung data sensitif, file export harus diperlakukan sebagai private document.
-
 ---
 
-# 40. NOTIFICATION SECURITY
+# 18. Sensitive Configuration
 
-Notifikasi tidak boleh membocorkan data sensitif.
-
-Contoh aman:
+Never place:
 
 ```text
-Ada surat baru yang memerlukan perhatian Anda.
+SUPABASE_SERVICE_ROLE_KEY
 ```
 
-Bukan:
+in Vite frontend variables.
+
+Allowed client configuration:
 
 ```text
-Surat rahasia Nomor X dari Y tentang Z telah masuk...
+VITE_SUPABASE_URL
+VITE_SUPABASE_PUBLISHABLE_KEY
 ```
 
-jika channel notifikasi tidak aman.
+Service-role credentials belong only to trusted server/edge environments.
 
 ---
 
-# 41. EMAIL SECURITY
+# 19. WhatsApp Security
 
-Email harus dianggap sebagai channel dengan risiko kebocoran.
+WhatsApp integration must not bypass authorization.
 
-Dokumen sensitif sebaiknya tidak otomatis dikirim sebagai attachment tanpa authorization dan kebijakan yang jelas.
-
----
-
-# 42. API SECURITY
-
-Setiap API/server action harus:
-
-1. Authenticate
-2. Authorize
-3. Validate input
-4. Execute business rule
-5. Persist transaction
-6. Audit sensitive action
-7. Return sanitized response
-
----
-
-# 43. TRANSACTION INTEGRITY
-
-Operasi multi-tabel yang harus konsisten harus menggunakan transaction atau mekanisme atomic equivalent.
-
-Contoh:
+Flow:
 
 ```text
-Create surat
-+
-Create nomor/register
-+
-Create audit log
+Database event
+   |
+   v
+Authorized notification event
+   |
+   v
+Integration service
+   |
+   v
+WhatsApp provider
 ```
 
-harus dipastikan tidak meninggalkan data setengah jadi.
+The bot must never query unrestricted employee data merely because it is an integration.
 
 ---
 
-# 44. SOFT DELETE
+# 20. Security Rules for AI Coding
 
-Untuk data yang memiliki nilai historis, gunakan soft delete/status bila sesuai.
+AI-generated code MUST NOT:
 
-Contoh:
+1. bypass RLS
+2. use service-role keys in frontend
+3. hard-code employee authority
+4. hard-code organizational hierarchy
+5. allow users to edit their own role
+6. allow users to edit audit logs
+7. treat frontend hiding as security
+8. silently change business approval rules
+
+Business-rule changes require documentation updates.
+
+---
+
+# 21. Security Testing
+
+Before production:
 
 ```text
-deleted_at
-deleted_by
-is_active
-status
-```
-
-Hard delete hanya digunakan jika memang aman dan diperlukan.
-
----
-
-# 45. BACKUP AND RECOVERY
-
-Database dan dokumen penting harus memiliki strategi backup.
-
-Minimal dokumentasikan:
-
-- Backup frequency
-- Retention
-- Recovery procedure
-- Restore testing
-- Responsibility
-
-Backup tidak menggantikan audit log.
-
----
-
-# 46. SECURITY CHECKLIST SEBELUM RELEASE
-
-Sebelum production:
-
-```text
-[ ] RLS enabled
-[ ] RLS policies tested
-[ ] Role access tested
-[ ] Public access tested
-[ ] Storage policies tested
-[ ] Secret scan
-[ ] .env excluded
-[ ] Service key not exposed
-[ ] Upload validation tested
-[ ] Authorization tested
-[ ] Audit log tested
-[ ] Approval workflow tested
-[ ] Export permission tested
-[ ] Error leakage tested
-[ ] Rate limiting reviewed
-[ ] Backup verified
+Unauthenticated access test
+Employee isolation test
+Subordinate scope test
+Cross-unit access test
+Role escalation test
+Service isolation test
+Audit immutability test
+Travel authorization test
+Document access test
+Admin boundary test
 ```
 
 ---
 
-# 47. AI CODING AGENT SECURITY RULES
+# 22. Security Baseline
 
-AI coding agent wajib:
+The final security principle is:
 
-1. Membaca `00_PROJECT_CHARTER.md` sampai dokumen security sebelum mengubah arsitektur.
-2. Tidak mengubah role resmi.
-3. Tidak membuat role baru tanpa persetujuan.
-4. Tidak menonaktifkan RLS untuk mempermudah development.
-5. Tidak menggunakan service role key di frontend.
-6. Tidak membuat storage bucket sensitif menjadi public.
-7. Tidak menghapus audit logging untuk mempercepat implementasi.
-8. Tidak bypass authorization.
-9. Tidak mengubah approval rules secara sepihak.
-10. Tidak membuat admin universal.
-11. Tidak hardcode privilege pada UI sebagai satu-satunya security.
-12. Tidak menghapus data produksi untuk debugging.
-13. Tidak memasukkan secret ke Git.
-14. Tidak mengubah schema production tanpa migration.
-15. Tidak mengubah business rules yang bertentangan dengan PRD.
+> Every employee has a unique identity. Every sensitive action is authorized by role, position, hierarchy and permission, and enforced at the database layer through RLS.
 
----
-
-# 48. DEVELOPMENT MODE
-
-Development environment boleh memiliki seed data.
-
-Namun:
-
-```text
-development credentials ≠ production credentials
-development database ≠ production database
-```
-
-Jangan menggunakan data pribadi/rahasia produksi sebagai seed tanpa prosedur yang sah.
-
----
-
-# 49. TESTING RBAC
-
-Minimal test matrix:
-
-```text
-superadmin
-admin_pekppp
-admin_perencanaan
-admin_litbang
-admin_sekretariat
-pimpinan
-public
-```
-
-Setiap role diuji terhadap:
-
-```text
-view
-create
-update
-delete
-approve
-download
-export
-```
-
-Untuk setiap modul yang relevan.
-
----
-
-# 50. NEGATIVE AUTHORIZATION TEST
-
-Security test tidak hanya menguji:
-
-```text
-role boleh → berhasil
-```
-
-tetapi juga:
-
-```text
-role tidak boleh → ditolak
-```
-
-Contoh:
-
-```text
-admin_litbang mencoba membaca surat internal
-→ DENIED
-
-admin_perencanaan mencoba mengubah PEKPPP
-→ DENIED
-
-public mencoba membaca disposisi
-→ DENIED
-
-pimpinan mencoba mengubah role user
-→ DENIED
-```
-
----
-
-# 51. FRONTEND SECURITY
-
-Frontend boleh menyembunyikan menu berdasarkan role untuk UX.
-
-Namun:
-
-```text
-hidden menu ≠ authorization
-```
-
-Jika user memanggil endpoint secara langsung, backend/database tetap harus menolak akses yang tidak sah.
-
----
-
-# 52. SECURITY BOUNDARY
-
-Security boundary resmi:
-
-```text
-Browser
-   ↓
-Application
-   ↓
-Server/API
-   ↓
-Supabase Auth
-   ↓
-RLS
-   ↓
-Database / Storage
-```
-
-Database dan storage policy harus menjadi lapisan terakhir.
-
----
-
-# 53. DEFAULT DENY
-
-Default behavior:
-
-```text
-No permission
-    ↓
-DENY
-```
-
-Permission harus diberikan secara eksplisit.
-
-Jangan menggunakan:
-
-```text
-if admin then allow everything
-```
-
-kecuali benar-benar merupakan permission superadmin yang sudah ditentukan.
-
----
-
-# 54. CHANGE CONTROL
-
-Perubahan terhadap:
-
-- Role
-- Permission
-- RLS
-- Approval
-- Security policy
-- Data classification
-- Storage access
-- Authentication
-
-harus:
-
-1. Didokumentasikan
-2. Direview
-3. Diimplementasikan
-4. Diuji
-5. Di-commit
-6. Dicatat dalam changelog bila relevan
-
----
-
-# 55. DEFINITION OF DONE — SECURITY
-
-Fitur dianggap selesai apabila:
-
-```text
-[ ] Requirement sesuai PRD
-[ ] Role sudah ditentukan
-[ ] Permission sudah ditentukan
-[ ] Server authorization tersedia
-[ ] RLS tersedia
-[ ] Storage policy tersedia jika diperlukan
-[ ] Input validation tersedia
-[ ] Audit tersedia untuk action sensitif
-[ ] Negative authorization test tersedia
-[ ] Tidak ada secret exposed
-[ ] Tidak ada bypass authorization
-[ ] Documentation diperbarui
-```
-
----
-
-# 56. SECURITY BASELINE
-
-Baseline keamanan E-KANJOLI:
-
-```text
-Authentication
-        +
-RBAC
-        +
-Least Privilege
-        +
-Server Authorization
-        +
-Supabase RLS
-        +
-Storage Policies
-        +
-Audit Trail
-        +
-Input Validation
-        +
-Secure Secrets
-        +
-Negative Security Testing
-```
-
-Tidak satu pun lapisan boleh dianggap sebagai pengganti lapisan lainnya.
-
----
-
-# 57. FINAL RULE
-
-> **E-KANJOLI harus fail closed, bukan fail open.**
-
-Jika sistem tidak dapat menentukan apakah user memiliki permission:
-
-```text
-DENY
-```
-
-Jika AI coding agent tidak yakin apakah suatu perubahan diperbolehkan:
-
-```text
-STOP
-→ identifikasi requirement
-→ periksa dokumen baseline
-→ jangan mengambil keputusan bisnis sendiri
-```
-
-Keamanan dan hak akses adalah bagian dari business requirement, bukan sekadar implementasi frontend.
-
----
-
-# 58. BASELINE
-
-Dokumen ini merupakan baseline keamanan:
-
-```text
-E-KANJOLI RBAC & SECURITY v1.0
-```
-
-Perubahan terhadap dokumen ini harus tetap konsisten dengan:
-
-```text
-PRD
-SYSTEM ARCHITECTURE
-DATABASE SCHEMA
-WORKFLOW
-AI DEVELOPMENT RULES
-```
-
-Semua implementasi aplikasi harus mengacu pada baseline tersebut.

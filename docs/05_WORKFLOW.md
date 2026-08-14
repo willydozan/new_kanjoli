@@ -1,2139 +1,724 @@
-# E-KANJOLI — WORKFLOW
-
-> Status: APPROVED BASELINE
-> Version: 1.0
-> Last Updated: 2026-08-14
-> Institution: Bappeda & Litbang Kabupaten Banggai Kepulauan
->
-> Related Documents:
-> - `00_PROJECT_CHARTER.md`
-> - `01_PRD.md`
-> - `02_SYSTEM_ARCHITECTURE.md`
-> - `03_DATABASE_SCHEMA.md`
-> - `04_RBAC_AND_SECURITY.md`
-
----
-
-# 1. TUJUAN
-
-Dokumen ini mendefinisikan workflow bisnis dan workflow sistem E-KANJOLI.
-
-Workflow harus menjelaskan:
-
-- siapa yang memulai proses;
-- siapa yang menerima;
-- siapa yang memverifikasi;
-- siapa yang memproses;
-- kapan pimpinan terlibat;
-- kapan notifikasi dikirim;
-- kapan audit log dibuat;
-- kapan dokumen diarsipkan;
-- status apa yang valid;
-- siapa yang berhak melakukan setiap perubahan.
-
-AI coding agent wajib menggunakan dokumen ini sebagai referensi utama ketika mengimplementasikan workflow.
-
----
-
-# 2. PRINSIP WORKFLOW
-
-Semua workflow E-KANJOLI mengikuti prinsip:
-
-1. Single source of truth.
-2. Status transition terkontrol.
-3. Role-based access.
-4. Separation of duties.
-5. Auditability.
-6. Traceability.
-7. Approval eksplisit.
-8. Notification event-driven.
-9. Document versioning.
-10. Archive after completion.
-11. Fail closed.
-12. Tidak ada perubahan status ilegal melalui frontend.
-
----
-
-# 3. ACTOR SISTEM
-
-Aktor internal:
-
-```text
-superadmin
-admin_pekppp
-admin_perencanaan
-admin_litbang
-admin_sekretariat
-pimpinan
-```
-
-Aktor eksternal:
-
-```text
-masyarakat
-OPD
-mitra pemerintah
-peneliti
-pelaku usaha
-pemohon layanan
-```
-
-Aktor tambahan yang dapat digunakan sebagai konsep operasional:
-
-```text
-front_office
-```
-
-`front_office` tidak otomatis menjadi role database baru.
-
-Jika dalam implementasi diperlukan operator front office, penetapan role/permission harus terlebih dahulu disetujui dan diselaraskan dengan PRD serta RBAC.
-
----
-
-# 4. WORKFLOW GENERIC
-
-Workflow umum:
-
-```text
-INITIATED
-    ↓
-REGISTERED
-    ↓
-VERIFIED
-    ↓
-ASSIGNED
-    ↓
-IN_PROGRESS
-    ↓
-REVIEW
-    ↓
-APPROVAL_REQUIRED
-    ↓
-APPROVED
-    ↓
-COMPLETED
-    ↓
-ARCHIVED
-```
-
-Tidak semua modul harus menggunakan seluruh status.
-
-Jika ditolak:
-
-```text
-REVIEW
-   ↓
-REJECTED
-```
-
-Jika perlu perbaikan:
-
-```text
-REVIEW
-   ↓
-REVISION_REQUIRED
-   ↓
-IN_PROGRESS
-```
-
----
-
-# 5. STATUS STANDARD
-
-Status yang dapat digunakan:
-
-```text
-DRAFT
-SUBMITTED
-REGISTERED
-VERIFIED
-ASSIGNED
-IN_PROGRESS
-REVIEW
-REVISION_REQUIRED
-APPROVAL_REQUIRED
-APPROVED
-REJECTED
-COMPLETED
-CANCELLED
-ARCHIVED
-```
-
-Setiap modul hanya boleh menggunakan subset status yang relevan.
-
----
-
-# 6. WORKFLOW MASTER
-
-```text
-Pemohon / Pegawai
-        ↓
-Pengajuan
-        ↓
-Registrasi
-        ↓
-Validasi
-        ↓
-Penentuan unit / role
-        ↓
-Penugasan
-        ↓
-Proses
-        ↓
-Review
-        ↓
-Approval jika diperlukan
-        ↓
-Penyelesaian
-        ↓
-Notifikasi
-        ↓
-Arsip
-        ↓
-Audit trail
-```
-
----
-
-# 7. WORKFLOW PORTAL PUBLIK
-
-## 7.1 Pengajuan Layanan
-
-```text
-Pemohon
-   ↓
-Pilih layanan
-   ↓
-Form dinamis
-   ↓
-Upload persyaratan
-   ↓
-Submit
-   ↓
-Validasi sistem
-   ↓
-Nomor tiket
-   ↓
-Notifikasi
-   ↓
-Admin bidang terkait
-```
-
-Sistem menghasilkan:
-
-```text
-ticket_number
-created_at
-service_id
-applicant information
-status
-```
-
----
-
-# 8. WORKFLOW TRACKING TIKET
-
-```text
-Pemohon
-   ↓
-Masukkan nomor tiket
-   ↓
-Verifikasi
-   ↓
-Sistem mencari request
-   ↓
-Tampilkan status publik
-```
-
-Status publik tidak boleh menampilkan catatan internal.
-
-Contoh:
-
-```text
-Pengajuan diterima
-Sedang diverifikasi
-Sedang diproses
-Menunggu persetujuan
-Selesai
-Ditolak
-```
-
----
-
-# 9. WORKFLOW LAYANAN PUBLIK
-
-Workflow standar:
-
-```text
-SUBMITTED
-    ↓
-REGISTERED
-    ↓
-VERIFIED
-    ↓
-ASSIGNED
-    ↓
-IN_PROGRESS
-    ↓
-REVIEW
-    ↓
-APPROVED / REJECTED
-    ↓
-COMPLETED
-    ↓
-ARCHIVED
-```
-
-Jika dokumen pemohon kurang:
-
-```text
-VERIFIED
-   ↓
-REVISION_REQUIRED
-   ↓
-Pemohon melengkapi
-   ↓
-VERIFIED
-```
-
----
-
-# 10. PENENTUAN UNIT LAYANAN
-
-Service memiliki:
-
-```text
-service_id
-category
-assigned_role
-```
-
-Mapping:
-
-```text
-PERENCANAAN
-    → admin_perencanaan
-
-LITBANG
-    → admin_litbang
-
-SEKRETARIAT / PPID
-    → admin_sekretariat
-```
-
-Routing request harus dilakukan berdasarkan `service_id` dan konfigurasi layanan.
-
-Jangan hardcode routing pada banyak komponen frontend.
-
----
-
-# 11. LIMA LAYANAN PERENCANAAN
-
-## 11.1 Data dan Informasi Pembangunan
-
-```text
-Pemohon
- ↓
-Pengajuan
- ↓
-Admin Perencanaan
- ↓
-Validasi kebutuhan data
- ↓
-Pencarian data
- ↓
-Review
- ↓
-Persetujuan bila diperlukan
- ↓
-Data/dokumen disiapkan
- ↓
-Pemohon diberi notifikasi
- ↓
-Selesai
-```
-
----
-
-## 11.2 Asistensi Renstra/Renja
-
-```text
-OPD/Mitra
- ↓
-Permohonan asistensi
- ↓
-Admin Perencanaan
- ↓
-Verifikasi dokumen
- ↓
-Penjadwalan asistensi
- ↓
-Pelaksanaan asistensi
- ↓
-Catatan hasil
- ↓
-Finalisasi
- ↓
-Arsip
-```
-
----
-
-## 11.3 e-Monev
-
-```text
-OPD
- ↓
-Permintaan/fasilitasi
- ↓
-Admin Perencanaan
- ↓
-Input / review data
- ↓
-Validasi
- ↓
-Evaluasi
- ↓
-Hasil
- ↓
-Laporan
- ↓
-Arsip
-```
-
----
-
-## 11.4 Musrenbang RKPD/RPJMD
-
-```text
-Pemohon / OPD
- ↓
-Pengajuan/fasilitasi
- ↓
-Admin Perencanaan
- ↓
-Verifikasi
- ↓
-Penjadwalan
- ↓
-Pelaksanaan
- ↓
-Dokumentasi
- ↓
-Berita/catatan hasil
- ↓
-Arsip
-```
-
----
-
-## 11.5 Pokir DPRD
-
-```text
-Pengusul
- ↓
-Pengajuan
- ↓
-Registrasi
- ↓
-Verifikasi
- ↓
-Kajian / sinkronisasi
- ↓
-Review
- ↓
-Keputusan / tindak lanjut
- ↓
-Status diperbarui
- ↓
-Arsip
-```
-
----
-
-# 12. EMPAT LAYANAN LITBANG
-
-## 12.1 Rekomendasi / Izin Penelitian
-
-```text
-Peneliti
- ↓
-Pengajuan
- ↓
-Admin Litbang
- ↓
-Verifikasi persyaratan
- ↓
-Review
- ↓
-Approval bila diperlukan
- ↓
-Surat rekomendasi/izin
- ↓
-Notifikasi
- ↓
-Arsip
-```
-
----
-
-## 12.2 Inovasi dan Kelitbangan
-
-```text
-Pemohon / Mitra
- ↓
-Pengajuan
- ↓
-Verifikasi
- ↓
-Review substansi
- ↓
-Fasilitasi
- ↓
-Hasil
- ↓
-Dokumentasi
- ↓
-Arsip
-```
-
----
-
-## 12.3 TJSLP / CSR
-
-```text
-Perusahaan / Mitra
- ↓
-Pengajuan
- ↓
-Registrasi
- ↓
-Verifikasi
- ↓
-Review
- ↓
-Koordinasi
- ↓
-Persetujuan / tindak lanjut
- ↓
-Pelaksanaan
- ↓
-Laporan
- ↓
-Arsip
-```
-
----
-
-## 12.4 Teknologi Daerah
-
-```text
-Pemohon / Mitra
- ↓
-Pengajuan
- ↓
-Verifikasi
- ↓
-Kajian
- ↓
-Review teknis
- ↓
-Rekomendasi
- ↓
-Approval bila diperlukan
- ↓
-Tindak lanjut
- ↓
-Arsip
-```
-
----
-
-# 13. PPID / PELAYANAN INFORMASI PUBLIK
-
-```text
-Pemohon
- ↓
-Permohonan informasi
- ↓
-Admin Sekretariat
- ↓
-Registrasi
- ↓
-Verifikasi
- ↓
-Identifikasi informasi
- ↓
-Koordinasi unit terkait
- ↓
-Penyusunan jawaban
- ↓
-Approval bila diperlukan
- ↓
-Jawaban dikirim
- ↓
-Selesai
- ↓
-Arsip
-```
-
-Jika permohonan merupakan pengaduan:
-
-```text
-Pengaduan
- ↓
-Registrasi
- ↓
-Klasifikasi
- ↓
-Disposisi
- ↓
-Unit terkait
- ↓
-Tindak lanjut
- ↓
-Jawaban
- ↓
-Selesai
-```
-
----
-
-# 14. WORKFLOW SURAT MASUK
-
-Surat masuk merupakan workflow inti Sekretariat.
-
-```text
-Surat diterima
-      ↓
-Front Office / Sekretariat
-      ↓
-Scan / Upload
-      ↓
-Registrasi
-      ↓
-Nomor agenda
-      ↓
-Klasifikasi
-      ↓
-Pemeriksaan
-      ↓
-Disposisi
-      ↓
-Pimpinan / pejabat berwenang
-      ↓
-Unit penerima
-      ↓
-Tindak lanjut
-      ↓
-Status selesai
-      ↓
-Arsip
-```
-
----
-
-# 15. FRONT OFFICE SURAT MASUK
-
-Front office secara operasional dapat bertugas:
-
-- menerima surat;
-- memeriksa kelengkapan administratif awal;
-- mencatat penerimaan;
-- melakukan scanning;
-- memasukkan metadata;
-- meneruskan ke admin sekretariat.
-
-Namun role database tidak boleh otomatis ditambah tanpa perubahan RBAC.
-
-Model awal:
-
-```text
-Front Office
-     ↓
-Admin Sekretariat
-     ↓
-Registrasi resmi
-     ↓
-e-Disposisi
-```
-
----
-
-# 16. DATA SURAT MASUK
-
-Minimal:
-
-```text
-nomor_surat
-tanggal_surat
-tanggal_diterima
-asal_surat
-perihal
-sifat_surat
-lampiran
-jenis_surat
-file_document
-agenda_number
-status
-```
-
----
-
-# 17. e-DISPOSISI
-
-Workflow:
-
-```text
-Surat Masuk
-    ↓
-Admin Sekretariat
-    ↓
-Ajukan Disposisi
-    ↓
-Pimpinan
-    ↓
-Instruksi
-    ↓
-Pilih penerima/unit
-    ↓
-Deadline
-    ↓
-Submit disposisi
-    ↓
-Unit penerima
-    ↓
-Tindak lanjut
-    ↓
-Update progres
-    ↓
-Selesai
-```
-
----
-
-# 18. DISPOSISI BERJENJANG
-
-Jika diperlukan:
-
-```text
-Pimpinan
-   ↓
-Sekretaris
-   ↓
-Kepala Bidang
-   ↓
-Staf/Pelaksana
-```
-
-Setiap disposisi menyimpan:
-
-```text
-from_user
-to_user / to_unit
-instruction
-deadline
-status
-created_at
-completed_at
-```
-
----
-
-# 19. WORKFLOW TINDAK LANJUT DISPOSISI
-
-```text
-ASSIGNED
-   ↓
-ACKNOWLEDGED
-   ↓
-IN_PROGRESS
-   ↓
-REVIEW
-   ↓
-COMPLETED
-```
-
-Jika terlambat:
-
-```text
-OVERDUE
-```
-
-Sistem dapat mengirim reminder otomatis.
-
----
-
-# 20. WORKFLOW SURAT KELUAR
-
-```text
-Draft
- ↓
-Penyusunan
- ↓
-Review
- ↓
-Perbaikan jika diperlukan
- ↓
-Approval
- ↓
-Nomor surat
- ↓
-Finalisasi
- ↓
-Pengiriman
- ↓
-Arsip
-```
-
-Nomor surat tidak boleh diberikan sebelum tahapan yang diwajibkan selesai.
-
----
-
-# 21. SURAT KELUAR — REVISION
-
-```text
-REVIEW
-   ↓
-REVISION_REQUIRED
-   ↓
-DRAFT
-   ↓
-REVIEW
-```
-
-Setiap revisi penting harus dapat ditelusuri.
-
----
-
-# 22. WORKFLOW PERJALANAN DINAS
-
-Workflow utama:
-
-```text
-Usulan perjalanan
-       ↓
-Verifikasi
-       ↓
-Persetujuan
-       ↓
-SPT
-       ↓
-SPPD
-       ↓
-Pelaksanaan
-       ↓
-Laporan perjalanan
-       ↓
-Verifikasi laporan
-       ↓
-Selesai
-       ↓
-Arsip
-```
-
----
-
-# 23. SPT
-
-```text
-Draft SPT
- ↓
-Review
- ↓
-Approval
- ↓
-Nomor SPT
- ↓
-Final
- ↓
-Issued
-```
-
----
-
-# 24. SPPD
-
-```text
-SPT approved
- ↓
-Generate SPPD
- ↓
-Review
- ↓
-Approval/validation
- ↓
-Final
- ↓
-Issued
-```
-
-SPPD tidak boleh dibuat sebagai dokumen yang berdiri sendiri tanpa keterkaitan dengan perjalanan/SPT.
-
----
-
-# 25. LAPORAN PERJALANAN
-
-```text
-Pegawai kembali
- ↓
-Upload laporan
- ↓
-Admin Sekretariat
- ↓
-Verifikasi
- ↓
-Revision jika perlu
- ↓
-Approved
- ↓
-Arsip
-```
-
----
-
-# 26. WORKFLOW ASET
-
-```text
-Pengadaan / penerimaan aset
-       ↓
-Registrasi aset
-       ↓
-Nomor/kode aset
-       ↓
-Inventarisasi
-       ↓
-Penempatan
-       ↓
-Pemeliharaan
-       ↓
-Mutasi bila ada
-       ↓
-Stock opname
-       ↓
-Penghapusan/pemindahtanganan
-       ↓
-Arsip histori
-```
-
----
-
-# 27. MUTASI ASET
-
-```text
-Usulan mutasi
- ↓
-Verifikasi
- ↓
-Approval
- ↓
-Update lokasi/pengguna
- ↓
-Audit log
-```
-
-Histori lokasi/pengguna sebelumnya tidak boleh hilang.
-
----
-
-# 28. WORKFLOW ARSIP
-
-```text
-Dokumen selesai
-      ↓
-Klasifikasi
-      ↓
-Metadata
-      ↓
-Penetapan retensi
-      ↓
-Storage
-      ↓
-Index
-      ↓
-Pencarian
-      ↓
-Akses berdasarkan permission
-      ↓
-Arsip
-```
-
----
-
-# 29. RENJA
-
-RENJA dikelola berdasarkan tahun.
-
-Struktur:
-
-```text
-RENJA
- ├── 2025
- ├── 2026
- ├── 2027
- ├── 2028
- └── ...
-```
-
-Workflow:
-
-```text
-Draft
- ↓
-Review
- ↓
-Finalisasi
- ↓
-Publish internal
- ↓
-Arsip
-```
-
----
-
-# 30. RKPD
-
-Struktur:
-
-```text
-RKPD
- ├── 2025
- ├── 2026
- ├── 2027
- └── ...
-```
-
-Workflow:
-
-```text
-Draft
- ↓
-Review
- ↓
-Finalisasi
- ↓
-Approval bila diperlukan
- ↓
-Dokumen final
- ↓
-Arsip
-```
-
----
-
-# 31. WORKFLOW PEKPPP
-
-```text
-Persiapan evaluasi
-       ↓
-Pilih periode
-       ↓
-Form F01
-       ↓
-Input aspek
-       ↓
-Upload bukti dukung
-       ↓
-Self assessment
-       ↓
-Review evaluator
-       ↓
-Revisi bila diperlukan
-       ↓
-Finalisasi
-       ↓
-Export laporan
-       ↓
-Arsip
-```
-
----
-
-# 32. PEKPPP — BUKTI DUKUNG
-
-```text
-Evaluator
- ↓
-Pilih aspek
- ↓
-Upload bukti
- ↓
-Validasi file
- ↓
-Kaitkan dengan indikator
- ↓
-Review
- ↓
-Final
-```
-
-Bukti dukung memiliki access scope internal.
-
----
-
-# 33. PEKPPP — PERIODE
-
-Evaluasi harus dapat dibedakan berdasarkan:
-
-```text
-tahun
-periode
-unit
-aspek
-indikator
-```
-
-Data periode sebelumnya tidak boleh tertimpa ketika periode baru dibuat.
-
----
-
-# 34. WORKFLOW PIMPINAN
-
-Dashboard pimpinan:
-
-```text
-Login
- ↓
-Dashboard Eksekutif
- ↓
-Ringkasan
- ↓
-Monitoring
- ↓
-Detail
- ↓
-Approval bila diperlukan
- ↓
-Laporan
-```
-
-Pimpinan tidak mengelola konfigurasi sistem.
-
----
-
-# 35. APPROVAL PIMPINAN
-
-```text
-Admin / unit
-    ↓
-Submit approval request
-    ↓
-Pimpinan
-    ↓
-Review
-    ├── Approve
-    ├── Reject
-    └── Revision
-```
-
-Jika revision:
-
-```text
-Pimpinan
- ↓
-REVISION_REQUIRED
- ↓
-Unit memperbaiki
- ↓
-Submit ulang
-```
-
----
-
-# 36. NOTIFICATION WORKFLOW
-
-Notification dipicu oleh event.
-
-Contoh:
-
-```text
-surat_masuk_registered
-disposition_created
-disposition_due
-disposition_overdue
-service_request_created
-service_request_status_changed
-approval_requested
-approval_completed
-document_uploaded
-revision_requested
-travel_approved
-travel_report_due
-pekppp_revision_requested
-```
-
----
-
-# 37. NOTIFICATION CHANNEL
-
-Channel dapat meliputi:
-
-```text
-in_app
-email
-```
-
-Channel tambahan hanya diterapkan setelah kebutuhan dan keamanan ditetapkan.
-
----
-
-# 38. REMINDER
-
-Reminder dapat digunakan untuk:
-
-- disposisi mendekati deadline;
-- disposisi terlambat;
-- approval menunggu;
-- laporan perjalanan belum masuk;
-- permohonan layanan mendekati SLA;
-- dokumen membutuhkan revisi;
-- evaluasi PEKPPP.
-
----
-
-# 39. SLA LAYANAN PUBLIK
-
-Setiap layanan dapat memiliki:
-
-```text
-service_standard
-target_duration
-working_days
-```
-
-Sistem menghitung:
-
-```text
-elapsed_time
-remaining_time
-overdue
-```
-
-Dashboard pimpinan dapat menampilkan:
-
-```text
-Within SLA
-At Risk
-Overdue
-Completed
-```
-
----
-
-# 40. AUDIT EVENT
-
-Workflow sensitif harus menghasilkan audit event.
-
-Contoh:
-
-```text
-SERVICE_SUBMITTED
-SERVICE_ASSIGNED
-SERVICE_APPROVED
-SERVICE_REJECTED
-LETTER_REGISTERED
-DISPOSITION_CREATED
-DISPOSITION_COMPLETED
-TRAVEL_APPROVED
-DOCUMENT_UPLOADED
-ASSET_TRANSFERRED
-PEKPPP_FINALIZED
-```
-
----
-
-# 41. WORKFLOW DOCUMENT
-
-Setiap workflow dokumen harus mempertahankan:
-
-```text
-document_id
-version
-created_by
-created_at
-updated_by
-updated_at
-status
-```
-
-Jika revisi diperlukan:
-
-```text
-version 1
-   ↓
-revision
-   ↓
-version 2
-```
-
----
-
-# 42. WORKFLOW ARCHIVE
-
-Setelah proses selesai:
-
-```text
-COMPLETED
-    ↓
-Archive validation
-    ↓
-ARCHIVED
-```
-
-Dokumen yang telah diarsipkan tidak boleh diedit secara normal.
-
-Jika perlu koreksi:
-
-```text
-ARCHIVED
-   ↓
-Controlled restore/revision
-   ↓
-New version
-   ↓
-ARCHIVED
-```
-
-Tindakan tersebut wajib diaudit.
-
----
-
-# 43. WORKFLOW ERROR / FAILURE
-
-Jika proses gagal:
-
-```text
-Operation failed
-    ↓
-Rollback transaction
-    ↓
-Log error
-    ↓
-Show safe error
-```
-
-Jangan meninggalkan status setengah jadi.
-
----
-
-# 44. WORKFLOW CONCURRENCY
-
-Jika dua user mengubah record yang sama:
-
-```text
-User A reads version 3
-User B reads version 3
-
-User A saves → version 4
-
-User B saves
-       ↓
-Conflict detected
-       ↓
-Reject stale update
-```
-
-Sistem tidak boleh diam-diam menimpa perubahan terbaru.
-
----
-
-# 45. WORKFLOW DELETE
-
-Data bisnis tidak langsung dihapus secara permanen.
-
-```text
-Delete request
- ↓
-Authorization
- ↓
-Check dependency
- ↓
-Soft delete / archive
- ↓
-Audit
-```
-
-Hard delete hanya untuk data yang memang diperbolehkan.
-
----
-
-# 46. WORKFLOW SEARCH
-
-Pencarian harus menghormati permission.
-
-```text
-User search
- ↓
-Authorization
- ↓
-RLS
- ↓
-Filter
- ↓
-Result
-```
-
-User tidak boleh mendapatkan data yang sebenarnya tidak boleh dibaca hanya karena menggunakan search.
-
----
-
-# 47. WORKFLOW EXPORT
-
-```text
-User request export
- ↓
-Check permission
- ↓
-Apply current filters
- ↓
-Generate file
- ↓
-Audit export
- ↓
-Private download
-```
-
-Export tidak boleh melewati RLS/authorization.
-
----
-
-# 48. CROSS-MODULE WORKFLOW
-
-E-KANJOLI memiliki keterkaitan modul.
-
-Contoh:
-
-```text
-Surat Masuk
-   ↓
-e-Disposisi
-   ↓
-Bidang
-   ↓
-Tindak lanjut
-   ↓
-Surat Keluar
-   ↓
-Arsip
-```
-
-Contoh lain:
-
-```text
-Perjalanan Dinas
-   ↓
-SPT
-   ↓
-SPPD
-   ↓
-Pelaksanaan
-   ↓
-Laporan
-   ↓
-Arsip
-```
-
----
-
-# 49. WORKFLOW DATA DAN DOCUMENT RELATIONSHIP
-
-Dokumen harus dapat dikaitkan dengan entity bisnis:
-
-```text
-surat
-service_request
-disposition
-travel_order
-travel_report
-asset
-renja
-rkpd
-pekppp
-```
-
-Jangan membuat dokumen sebagai file tanpa metadata dan hubungan bisnis.
-
----
-
-# 50. DASHBOARD WORKFLOW
-
-Dashboard mengambil data dari status workflow.
-
-Contoh:
-
-```text
-PENDING
-IN_PROGRESS
-APPROVAL_REQUIRED
-OVERDUE
-COMPLETED
-```
-
-Dashboard tidak boleh memiliki status bisnis sendiri yang bertentangan dengan data transaksi.
-
----
-
-# 51. CROSS-ROLE HANDOFF
-
-Ketika pekerjaan berpindah role:
-
-```text
-Actor A
- ↓
-Submit
- ↓
-System assigns
- ↓
-Actor B
- ↓
-Notification
- ↓
-Actor B acknowledges
-```
-
-Setiap handoff harus dapat dilacak.
-
----
-
-# 52. HANDOFF ANTAR BIDANG
-
-Jika suatu permohonan salah routing:
-
-```text
-Admin menerima
- ↓
-Tidak sesuai kewenangan
- ↓
-Return / reroute
- ↓
-Pilih unit tujuan
- ↓
-Alasan
- ↓
-Audit
-```
-
-Tidak boleh mengubah `assigned_role` secara sembarang tanpa histori.
-
----
-
-# 53. WORKFLOW KORESPONDENSI
-
-Surat yang menghasilkan tindak lanjut layanan dapat memiliki relationship:
-
-```text
-incoming_letter
-    ↓
-disposition
-    ↓
-service_request / internal_task
-    ↓
-outgoing_letter
-    ↓
-archive
-```
-
----
-
-# 54. INTERNAL TASK
-
-Untuk disposisi yang membutuhkan pekerjaan, sistem dapat menggunakan task internal.
-
-Minimal:
-
-```text
-title
-description
-assignee
-due_date
-priority
-status
-source
-```
-
-Status:
-
-```text
-TODO
-IN_PROGRESS
-BLOCKED
-DONE
-OVERDUE
-```
-
----
-
-# 55. PRIORITY
-
-Prioritas dapat:
-
-```text
-LOW
-NORMAL
-HIGH
-URGENT
-```
-
-Penggunaan `URGENT` harus mengikuti kebijakan organisasi.
-
----
-
-# 56. ESCALATION
-
-Jika pekerjaan melewati deadline:
-
-```text
-Task overdue
- ↓
-Reminder
- ↓
-Escalation
- ↓
-Supervisor / pimpinan
-```
-
-Escalation harus configurable.
-
----
-
-# 57. WORKFLOW PUBLIC TO INTERNAL
-
-```text
-PUBLIC REQUEST
-      ↓
-SERVICE REQUEST
-      ↓
-ADMIN UNIT
-      ↓
-INTERNAL TASK
-      ↓
-REVIEW
-      ↓
-APPROVAL
-      ↓
-PUBLIC RESPONSE
-      ↓
-ARCHIVE
-```
-
-Catatan internal tidak boleh masuk ke response publik.
-
----
-
-# 58. WORKFLOW INTERNAL TO PUBLIC
-
-Jika dokumen internal akan dipublikasikan:
-
-```text
-Internal document
- ↓
-Classification review
- ↓
-Public release approval
- ↓
-Published copy
-```
-
-Dokumen internal asli tetap berada pada storage internal.
-
----
-
-# 59. WORKFLOW PPID
-
-Untuk informasi yang membutuhkan koordinasi:
-
-```text
-PPID
- ↓
-Identifikasi unit pemilik informasi
- ↓
-Request internal
- ↓
-Unit menyediakan informasi
- ↓
-Review klasifikasi
- ↓
-PPID final response
- ↓
-Pemohon
-```
-
----
-
-# 60. WORKFLOW PENGADUAN
-
-```text
-Pengadu
- ↓
-Submit
- ↓
-Ticket
- ↓
-Classification
- ↓
-Verification
- ↓
-Disposition
- ↓
-Unit terkait
- ↓
-Investigation / response
- ↓
-Review
- ↓
-Response
- ↓
-Close
-```
-
----
-
-# 61. WORKFLOW AUDIT
-
-Audit tidak boleh mengubah workflow bisnis.
-
-Audit hanya merekam:
-
-```text
-who
-what
-when
-where
-resource
-before
-after
-```
-
----
-
-# 62. WORKFLOW SYSTEM CONFIGURATION
-
-Hanya superadmin:
-
-```text
-Configuration
- ↓
-Validate
- ↓
-Save
- ↓
-Audit
-```
-
-Perubahan konfigurasi yang berdampak bisnis harus didokumentasikan.
-
----
-
-# 63. WORKFLOW USER ROLE
-
-```text
-Superadmin
- ↓
-Create / select user
- ↓
-Assign role
- ↓
-Validate
- ↓
-Activate
- ↓
-Audit
-```
-
-Role change:
-
-```text
-Old Role
- ↓
-New Role
- ↓
-Audit
-```
-
----
-
-# 64. WORKFLOW LOGIN
-
-```text
-User
- ↓
-Login
- ↓
-Authentication
- ↓
-Session
- ↓
-Load profile
- ↓
-Load role
- ↓
-Authorization
- ↓
-Dashboard sesuai role
-```
-
-Jika akun nonaktif:
-
-```text
-Authentication / authorization
- ↓
-Account disabled
- ↓
-Access denied
-```
-
----
-
-# 65. WORKFLOW LOGOUT
-
-```text
-User
- ↓
-Logout
- ↓
-Session invalidation
- ↓
-Return login
-```
-
----
-
-# 66. WORKFLOW BACKUP
-
-```text
-Scheduled backup
- ↓
-Database backup
- ↓
-Storage backup
- ↓
-Verification
- ↓
-Backup metadata
- ↓
-Retention
-```
-
-Restore harus diuji secara berkala.
-
----
-
-# 67. WORKFLOW DEPLOYMENT
-
-```text
-Development
- ↓
-Lint
- ↓
-Typecheck
- ↓
-Unit test
- ↓
-Integration test
- ↓
-Build
- ↓
-Review
- ↓
-Staging
- ↓
-Acceptance
- ↓
-Production
-```
-
-Migration database harus melalui migration file yang versioned.
-
----
-
-# 68. WORKFLOW BUG FIX
-
-```text
-Bug reported
- ↓
-Reproduce
- ↓
-Identify root cause
- ↓
-Implement fix
- ↓
-Test
- ↓
-Review
- ↓
-Commit
- ↓
-Deploy
- ↓
-Verify
-```
-
-Jangan memperbaiki bug dengan menghapus data produksi.
-
----
-
-# 69. WORKFLOW AI DEVELOPMENT
-
-AI coding agent harus:
-
-```text
-Read requirements
- ↓
-Read architecture
- ↓
-Read database
- ↓
-Read RBAC
- ↓
-Read workflow
- ↓
-Plan
- ↓
-Implement
- ↓
-Test
- ↓
-Review
- ↓
+# E-KANJOLI — BUSINESS WORKFLOW
+## Version 1.2 — Updated Baseline
+
+---
+
+# 1. Workflow Philosophy
+
+E-KANJOLI treats every instruction and activity as a traceable digital transaction.
+
+General model:
+
+```text
+Instruction
+   |
+   v
+Assignment
+   |
+   v
+Execution
+   |
+   v
+Progress
+   |
+   v
+Completion
+   |
+   v
+Verification / Approval
+   |
+   v
+History
+   |
+   v
 Report
 ```
 
-Jika requirement tidak jelas:
-
-```text
-STOP
-```
-
-Jangan membuat keputusan bisnis sepihak.
+The system must preserve the entire chain.
 
 ---
 
-# 70. WORKFLOW CHANGE REQUEST
+# 2. All Employees Are System Users
 
-Jika kebutuhan baru muncul:
+Every employee uses a personal account.
+
+This includes:
 
 ```text
-Request
- ↓
-Analyze impact
- ↓
-PRD review
- ↓
-Architecture review
- ↓
-Database impact
- ↓
-RBAC impact
- ↓
-Workflow impact
- ↓
-Approval
- ↓
-Documentation update
- ↓
-Implementation
- ↓
-Testing
+Kepala Badan
+Sekretaris
+Kepala Sub Bagian
+Kepala Bidang
+Fungsional
+Staff
+```
+
+The account identifies the actor in every workflow.
+
+---
+
+# 3. Organizational Workflow
+
+## 3.1 Kepala Badan
+
+Can issue instructions to:
+
+```text
+Sekretaris
+Kepala Bidang
+```
+
+and, when explicitly required by the workflow, other employees.
+
+## 3.2 Sekretaris
+
+Can receive instructions from Kepala Badan and distribute work within authorized Secretariat scope.
+
+## 3.3 Kepala Bidang
+
+Can receive instructions from Kepala Badan and distribute work to personnel within the authorized field.
+
+## 3.4 Kepala Sub Bagian
+
+Can manage work within the authorized sub-section.
+
+## 3.5 Fungsional / Staff
+
+Execute assigned work.
+
+---
+
+# 4. Task Workflow
+
+```text
+Create Task
+    |
+    v
+Assign Employee
+    |
+    v
+Notification
+    |
+    v
+Acknowledged
+    |
+    v
+In Progress
+    |
+    +----> Blocked
+    |
+    v
+Submitted / Completed
+    |
+    v
+Verification
+    |
+    v
+Closed
+```
+
+Possible statuses:
+
+```text
+draft
+assigned
+acknowledged
+in_progress
+blocked
+submitted
+completed
+rejected
+cancelled
+closed
+```
+
+Every status change is recorded.
+
+---
+
+# 5. Task Assignment
+
+Task contains:
+
+```text
+issuer
+assignee
+unit
+priority
+deadline
+description
+source
+```
+
+The source can be:
+
+```text
+manual_instruction
+incoming_letter
+disposition
+agenda
+service
+project
+other
 ```
 
 ---
 
-# 71. WORKFLOW VERSIONING
-
-Setiap perubahan workflow yang signifikan harus:
+# 6. Disposition Workflow
 
 ```text
-document update
-+
-migration if needed
-+
-test update
-+
-audit/change record
-```
-
----
-
-# 72. DEFINITION OF DONE
-
-Workflow dianggap selesai apabila:
-
-```text
-[ ] Actor jelas
-[ ] Entry point jelas
-[ ] Status jelas
-[ ] Transition jelas
-[ ] Permission jelas
-[ ] Approval jelas
-[ ] Notification jelas
-[ ] Audit event jelas
-[ ] Error path jelas
-[ ] Revision path jelas
-[ ] Archive path jelas
-[ ] Negative authorization test tersedia
-```
-
----
-
-# 73. MASTER WORKFLOW E-KANJOLI
-
-```text
-                         E-KANJOLI
-                              │
-          ┌───────────────────┼───────────────────┐
-          │                   │                   │
-       PUBLIC              INTERNAL            LEADERSHIP
-          │                   │                   │
-          ↓                   ↓                   ↓
-   Service Request       Smart Office        Dashboard
-          │                   │                   │
-          │          ┌────────┼────────┐          │
-          │          │        │        │          │
-          │       Surat    Perjalanan  Aset       │
-          │          │        │        │          │
-          │      Disposisi   SPT/SPPD  Invent.    │
-          │          │        │        │          │
-          └──────────┼────────┼────────┘          │
-                     │        │                   │
-                     ↓        ↓                   ↓
-                  Bidang   Dokumen            Approval
-                     │        │                   │
-          ┌──────────┼────────┘                   │
-          │          │                            │
-     Perencanaan   Litbang                  Monitoring
-          │          │                            │
-          └──────────┼────────────────────────────┘
-                     │
-                     ↓
-                  Selesai
-                     │
-                     ↓
-                  Notifikasi
-                     │
-                     ↓
-                   Arsip
-                     │
-                     ↓
-                 Audit Trail
-```
-
----
-
-# 74. MASTER ROLE FLOW
-
-```text
-PUBLIC
-  ↓
-Portal layanan
-  ↓
-Admin Sekretariat / Admin Bidang
-  ↓
-Processing
-  ↓
-Pimpinan jika approval diperlukan
-  ↓
+Incoming Letter
+      |
+      v
+Registration
+      |
+      v
+Review by authorized official
+      |
+      v
+Disposition
+      |
+      v
+Recipient
+      |
+      v
+Task
+      |
+      v
+Execution
+      |
+      v
+Evidence / Response
+      |
+      v
 Completion
 ```
 
-Administrasi internal:
-
-```text
-Sekretariat
-  ↓
-Surat
-  ↓
-Disposisi
-  ↓
-Bidang
-  ↓
-Tindak lanjut
-  ↓
-Arsip
-```
-
-PEKPPP:
-
-```text
-Admin PEKPPP
-  ↓
-F01
-  ↓
-Bukti dukung
-  ↓
-Evaluasi
-  ↓
-Final
-  ↓
-Reporting
-```
+The recipient cannot rewrite the original disposition.
 
 ---
 
-# 75. WORKFLOW SECURITY RULE
-
-Setiap transition wajib menjawab:
+# 7. Incoming Letter Workflow
 
 ```text
-WHO?
-WHAT?
-WHEN?
-WHY?
-TO WHOM?
-WHAT DATA?
-WHAT PERMISSION?
-WHAT AUDIT?
-WHAT NOTIFICATION?
+Receive Letter
+    |
+    v
+Register
+    |
+    v
+Scan / Upload
+    |
+    v
+Classify
+    |
+    v
+Forward / Disposition
+    |
+    v
+Task generated
+    |
+    v
+Monitor
+    |
+    v
+Archive
 ```
 
-Jika salah satu aspek kritis tidak jelas, workflow belum siap diimplementasikan.
+Every letter can be tracked from arrival to archive.
 
 ---
 
-# 76. FINAL BASELINE
-
-Workflow baseline E-KANJOLI:
+# 8. Outgoing Letter Workflow
 
 ```text
-Public Service
-+
-Smart Office
-+
-Correspondence
-+
-e-Disposition
-+
-Official Travel
-+
-Asset Management
-+
-Document Archive
-+
-RENJA
-+
-RKPD
-+
-PEKPPP
-+
-Notification
-+
+Draft
+  |
+  v
+Review
+  |
+  v
+Correction (if needed)
+  |
+  v
 Approval
-+
-Reporting
-+
-Audit Trail
+  |
+  v
+Numbering
+  |
+  v
+Signature
+  |
+  v
+Dispatch
+  |
+  v
+Archive
 ```
 
-Semua modul harus menggunakan workflow yang konsisten dengan:
+---
+
+# 9. Workload Monitoring
+
+The system calculates workload from actual activity.
+
+Examples:
 
 ```text
-01_PRD.md
-02_SYSTEM_ARCHITECTURE.md
-03_DATABASE_SCHEMA.md
-04_RBAC_AND_SECURITY.md
+total assigned tasks
+completed tasks
+pending tasks
+overdue tasks
+dispositions
+letters processed
+service requests
+agenda activities
+travel assignments
 ```
 
-Dokumen ini menjadi baseline:
+Reports can be viewed:
 
 ```text
-E-KANJOLI WORKFLOW v1.0
+per employee
+per position
+per unit
+per month
+per year
 ```
+
+The workload metric must remain explainable.
+
+No opaque AI score should become an official personnel decision without approved methodology.
+
+---
+
+# 10. Leadership Dashboard
+
+Kepala Badan dashboard may include:
+
+```text
+Total active tasks
+Completed tasks
+Overdue tasks
+Tasks by unit
+Tasks by employee
+Workload distribution
+Incoming letters
+Pending dispositions
+Travel activity
+Public service activity
+Monthly trends
+Annual trends
+```
+
+The dashboard must link summary numbers back to source records.
+
+---
+
+# 11. Travel Workflow
+
+## 11.1 Proposal
+
+Authorized users can initiate travel proposal according to permission.
+
+## 11.2 Instruction-Based Travel
+
+Fungsional and Staff can perform official travel when assigned by a valid authority.
+
+Workflow:
+
+```text
+Instruction
+   |
+   v
+Travel Assignment
+   |
+   v
+Approval
+   |
+   v
+Travel Order
+   |
+   v
+Execution
+   |
+   v
+Travel Evidence
+   |
+   v
+Report
+   |
+   v
+Archive
+```
+
+Important:
+
+> Tidak boleh mengusulkan sendiri bukan berarti tidak boleh melakukan perjalanan dinas.
+
+---
+
+# 12. Public Service Workflow
+
+The ten public services are handled by designated service administrators.
+
+General pattern:
+
+```text
+Citizen submits request
+       |
+       v
+Validation
+       |
+       v
+Service Admin
+       |
+       v
+Processing
+       |
+       v
+Review / Approval if required
+       |
+       v
+Completion
+       |
+       v
+Citizen notification
+       |
+       v
+Archive + report
+```
+
+Each service can have its own SLA and workflow while retaining the common platform model.
+
+---
+
+# 13. Service Reporting
+
+Every service must support:
+
+```text
+daily operational data
+monthly recap
+annual recap
+```
+
+Metrics may include:
+
+```text
+incoming requests
+completed requests
+pending requests
+rejected requests
+processing time
+SLA compliance
+```
+
+---
+
+# 14. Document and Archive Workflow
+
+```text
+Document Created / Received
+       |
+       v
+Classification
+       |
+       v
+Versioning
+       |
+       v
+Active Use
+       |
+       v
+Finalization
+       |
+       v
+Archive
+```
+
+Archive filters:
+
+```text
+month
+year
+document type
+category
+unit
+status
+```
+
+---
+
+# 15. Agenda Workflow
+
+```text
+Create Agenda
+     |
+     v
+Participants
+     |
+     v
+Notification
+     |
+     v
+Activity
+     |
+     v
+Attendance / Result
+     |
+     v
+Report
+```
+
+Agenda can trigger WhatsApp group notifications.
+
+---
+
+# 16. Notification Workflow
+
+Events generating notifications include:
+
+```text
+new task
+new disposition
+deadline reminder
+overdue task
+approval request
+travel status
+agenda
+service request
+letter status
+```
+
+Application notification is the primary notification.
+
+WhatsApp is a secondary delivery channel.
+
+---
+
+# 17. WhatsApp BOT Workflow
+
+## 17.1 Disposition
+
+```text
+Disposition created
+       |
+       +--> In-app notification
+       |
+       +--> WhatsApp group
+```
+
+## 17.2 Direct Task
+
+```text
+Task assigned
+       |
+       +--> In-app notification
+       |
+       +--> WhatsApp direct message
+```
+
+## 17.3 Agenda
+
+```text
+Agenda created
+       |
+       +--> In-app notification
+       |
+       +--> WhatsApp group
+```
+
+WhatsApp delivery must be logged.
+
+If WhatsApp fails, the application record remains valid.
+
+---
+
+# 18. Notification Preferences
+
+Each employee may configure allowed notification preferences where policy permits.
+
+Examples:
+
+```text
+task
+disposition
+agenda
+travel
+service
+deadline
+```
+
+Mandatory official notifications cannot be disabled if organizational policy requires delivery.
+
+---
+
+# 19. History and Audit
+
+Every important workflow action creates history.
+
+Examples:
+
+```text
+created
+assigned
+acknowledged
+started
+updated
+submitted
+approved
+rejected
+completed
+cancelled
+archived
+```
+
+History records:
+
+```text
+actor
+timestamp
+action
+old state
+new state
+notes
+```
+
+---
+
+# 20. Monthly Reporting
+
+At month end, the system can generate:
+
+```text
+employee activity
+employee workload
+task completion
+disposition completion
+incoming/outgoing letters
+travel
+public services
+agenda
+documents archived
+notifications
+```
+
+Reports should use transactional records and reporting views.
+
+---
+
+# 21. Annual Reporting
+
+Annual reports aggregate monthly and transactional data.
+
+Examples:
+
+```text
+annual workload
+annual service performance
+annual document archive
+annual correspondence
+annual travel
+annual activity
+annual task completion
+```
+
+---
+
+# 22. Transfer / Employee Mutation Workflow
+
+When an employee changes unit or position:
+
+```text
+Update organizational assignment
+       |
+       v
+Update position
+       |
+       v
+Update supervisor
+       |
+       v
+Update permissions if required
+       |
+       v
+Preserve historical transactions
+```
+
+Old records retain the original actor and organizational context.
+
+---
+
+# 23. Employee Deactivation
+
+When employee becomes inactive:
+
+```text
+Deactivate account
+       |
+       v
+Block new assignments
+       |
+       v
+Preserve historical records
+       |
+       v
+Reassign unfinished tasks
+       |
+       v
+Record reassignment history
+```
+
+Historical ownership is never erased.
+
+---
+
+# 24. Workflow Governance
+
+AI coding agents and developers MUST NOT invent new approval chains.
+
+Any change to:
+
+```text
+authority
+approval
+organizational hierarchy
+service ownership
+travel rights
+official reporting
+```
+
+must update the relevant documentation before implementation.
+
+---
+
+# 25. Final Workflow Principle
+
+E-KANJOLI is not merely a document storage application.
+
+It is an accountability system:
+
+```text
+WHO
+  |
+WHAT
+  |
+WHY
+  |
+WHEN
+  |
+TO WHOM
+  |
+STATUS
+  |
+EVIDENCE
+  |
+RESULT
+  |
+HISTORY
+  |
+REPORT
+```
+
+Every official digital action should be traceable to a responsible authenticated employee.
