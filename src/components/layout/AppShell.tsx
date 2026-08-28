@@ -1,23 +1,52 @@
-import type { ReactNode } from 'react'
+import { useState } from 'react'
+import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 
-type AppShellProps = {
-  children: ReactNode
-}
+export function AppShell() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
-export function AppShell({
-  children,
-}: AppShellProps) {
+  const closeMobileSidebar = () => {
+    setMobileSidebarOpen(false)
+  }
+
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <Sidebar />
+    <div className="min-h-screen bg-slate-50">
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        mobileOpen={mobileSidebarOpen}
+        onClose={closeMobileSidebar}
+        onToggleCollapse={() =>
+          setSidebarCollapsed((value) => !value)
+        }
+      />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          aria-label="Tutup menu"
+          onClick={closeMobileSidebar}
+          className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-[2px] lg:hidden"
+        />
+      )}
 
-        <main className="flex-1 overflow-auto">
-          {children}
+      <Topbar
+        sidebarCollapsed={sidebarCollapsed}
+        onMenuClick={() =>
+          setMobileSidebarOpen(true)
+        }
+      />
+
+      <div
+        className={`
+          min-h-screen pt-16
+          transition-[margin] duration-300
+          ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-72'}
+        `}
+      >
+        <main className="min-h-[calc(100vh-4rem)]">
+          <Outlet />
         </main>
       </div>
     </div>

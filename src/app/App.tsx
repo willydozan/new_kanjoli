@@ -1,10 +1,13 @@
-import { AppShell } from '../components/layout/AppShell'
-import { DashboardPage } from '../pages/DashboardPage'
+import { RouterProvider } from 'react-router-dom'
+import { AuthProvider } from '../features/auth/AuthProvider'
+import { router } from './router'
 
-export default function App() {
+function App() {
   return (
-    <AppShell>
-      <DashboardPage />
-    </AppShell>
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
   )
 }
+
+export default App
