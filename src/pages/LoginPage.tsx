@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { getCurrentUserProfile } from '../features/auth/auth.service'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -17,42 +16,34 @@ export function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const { data, error: signInError } =
-      await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      })
-
-    if (signInError) {
-      setError(signInError.message)
-      setLoading(false)
-      return
-    }
-
-    // Do not navigate until the authenticated user's application profile
-    // has been confirmed. This prevents ProtectedRoute from seeing a valid
-    // session while profile is still null and incorrectly redirecting to 403.
     try {
+      const { data, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        })
+
+      if (signInError) {
+        setError(signInError.message)
+        return
+      }
+
       if (!data.session) {
-        throw new Error('Login berhasil tetapi session tidak tersedia.')
+        setError('Login berhasil tetapi session tidak tersedia.')
+        return
       }
 
-      const profile = await getCurrentUserProfile()
-
-      if (!profile) {
-        throw new Error(
-          'Akun berhasil login, tetapi profil pengguna belum terhubung ke data pegawai dan role.',
-        )
-      }
-
+      // AuthProvider menerima event SIGNED_IN, menahan loading selama
+      // profile aplikasi dimuat, lalu ProtectedRoute hanya membuka aplikasi
+      // setelah profile + role tersedia. Jangan melakukan lookup profile
+      // kedua di sini karena dapat menimbulkan race dengan AuthProvider.
       navigate('/', { replace: true })
-    } catch (profileError) {
-      console.error('LOGIN PROFILE ERROR:', profileError)
-      await supabase.auth.signOut()
+    } catch (signInError) {
+      console.error('LOGIN ERROR:', signInError)
       setError(
-        profileError instanceof Error
-          ? profileError.message
-          : 'Profil pengguna tidak dapat dimuat.',
+        signInError instanceof Error
+          ? signInError.message
+          : 'Login gagal. Silakan coba lagi.',
       )
     } finally {
       setLoading(false)
