@@ -1,10 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { getCurrentUserProfile } from '../features/auth/auth.service'
 import { useAuth } from '../features/auth/AuthProvider'
+
+const PROFILE_CHECK_ATTEMPTS = 5
+const PROFILE_CHECK_DELAY_MS = 300
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { session, profile, loading: authLoading } = useAuth()
 
   const [email, setEmail] = useState('')
@@ -12,17 +17,19 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Jangan melakukan navigate segera setelah signInWithPassword.
-  // AuthProvider perlu menyelesaikan pemuatan profile + role terlebih dahulu.
+  const from = (location.state as { from?: string } | null)?.from ?? '/'
+
   useEffect(() => {
-    if (session && !authLoading && profile) {
-      navigate('/', { replace: true })
+    if (session && profile && !authLoading) {
+      navigate(from, { replace: true })
     }
-  }, [session, authLoading, profile, navigate])
+  }, [session, profile, authLoading, navigate, from])
+
+  const wait = (ms: number) =>
+    new Promise<void>((resolve) => setTimeout(resolve, ms))
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-
     setLoading(true)
     setError(null)
 
@@ -39,12 +46,33 @@ export function LoginPage() {
       }
 
       if (!data.session) {
-        setError('Login berhasil tetapi session tidak tersedia.')
+        setError('Login berhasil tetapi session tidak tersedia. Silakan coba lagi.')
         return
       }
 
-      // AuthProvider menangani event SIGNED_IN dan memuat profile.
-      // Navigation dilakukan oleh effect setelah profile benar-benar tersedia.
+      // Verify the complete application identity before navigating.
+      // This prevents the old race where the UI stayed on /login or
+      // redirected to 403 before employee/role loading finished.
+      let currentProfile = null
+
+      for (let attempt = 1; attempt <= PROFILE_CHECK_ATTEMPTS; attempt += 1) {
+        currentProfile = await getCurrentUserProfile()
+
+        if (currentProfile) break
+
+        if (attempt < PROFILE_CHECK_ATTEMPTS) {
+          await wait(PROFILE_CHECK_DELAY_MS)
+        }
+      }
+
+      if (!currentProfile) {
+        setError(
+          'Login berhasil, tetapi profil pengguna belum ditemukan. Pastikan akun sudah terhubung ke data pegawai dan role di database.',
+        )
+        return
+      }
+
+      navigate(from, { replace: true })
     } catch (signInError) {
       console.error('LOGIN ERROR:', signInError)
       setError(
@@ -62,17 +90,15 @@ export function LoginPage() {
       <div className="w-full max-w-md">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="mb-8">
-            <p className="text-sm font-semibold text-slate-500">
-              E-KANJOLI
-            </p>
+            <p className="text-sm font-semibold text-slate-500">E-KANJOLI</p>
 
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
               Masuk ke Sistem
             </h1>
 
             <p className="mt-2 text-sm text-slate-500">
-              Smart Office & Pelayanan Publik Terintegrasi
-              Bappeda & Litbang Kabupaten Banggai Kepulauan.
+              Smart Office & Pelayanan Publik Terintegrasi Bappeda & Litbang
+              Kabupaten Banggai Kepulauan.
             </p>
           </div>
 
