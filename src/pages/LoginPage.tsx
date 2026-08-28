@@ -1,14 +1,24 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../features/auth/AuthProvider'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const { session, profile, loading: authLoading } = useAuth()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Jangan melakukan navigate segera setelah signInWithPassword.
+  // AuthProvider perlu menyelesaikan pemuatan profile + role terlebih dahulu.
+  useEffect(() => {
+    if (session && !authLoading && profile) {
+      navigate('/', { replace: true })
+    }
+  }, [session, authLoading, profile, navigate])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -33,11 +43,8 @@ export function LoginPage() {
         return
       }
 
-      // AuthProvider menerima event SIGNED_IN, menahan loading selama
-      // profile aplikasi dimuat, lalu ProtectedRoute hanya membuka aplikasi
-      // setelah profile + role tersedia. Jangan melakukan lookup profile
-      // kedua di sini karena dapat menimbulkan race dengan AuthProvider.
-      navigate('/', { replace: true })
+      // AuthProvider menangani event SIGNED_IN dan memuat profile.
+      // Navigation dilakukan oleh effect setelah profile benar-benar tersedia.
     } catch (signInError) {
       console.error('LOGIN ERROR:', signInError)
       setError(
@@ -118,10 +125,10 @@ export function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || authLoading}
               className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? 'Memproses...' : 'Masuk'}
+              {loading || authLoading ? 'Memproses...' : 'Masuk'}
             </button>
           </form>
         </div>
