@@ -35,38 +35,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const loadProfile = async () => {
       try {
         const currentProfile = await getCurrentUserProfile()
-
-        if (mounted) {
-          setProfile(currentProfile)
-        }
+        if (mounted) setProfile(currentProfile)
       } catch (error) {
         console.error('Failed to load user profile:', error)
-
-        if (mounted) {
-          setProfile(null)
-        }
+        if (mounted) setProfile(null)
       }
     }
 
     const initializeAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      try {
+        const {
+          data: { session: currentSession },
+          error,
+        } = await supabase.auth.getSession()
 
-      if (!mounted) {
-        return
-      }
+        if (error) throw error
+        if (!mounted) return
 
-      setSession(session)
-
-      if (session) {
-        await loadProfile()
-      } else {
-        setProfile(null)
-      }
-
-      if (mounted) {
-        setLoading(false)
+        setSession(currentSession)
+        if (currentSession) {
+          await loadProfile()
+        } else {
+          setProfile(null)
+        }
+      } catch (error) {
+        console.error('Failed to initialize authentication:', error)
+        if (mounted) {
+          setSession(null)
+          setProfile(null)
+        }
+      } finally {
+        if (mounted) setLoading(false)
       }
     }
 
@@ -74,18 +73,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session)
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      if (!mounted) return
 
-      if (session) {
-        await loadProfile()
-      } else {
-        setProfile(null)
-      }
+      setSession(currentSession)
 
-      if (mounted) {
-        setLoading(false)
-      }
+      // Supabase may still hold its auth lock while this callback runs.
+      // Defer the profile request until the callback has returned.
+      setTimeout(() => {
+        if (!mounted) return
+
+        if (!currentSession) {
+          setProfile(null)
+          setLoading(false)
+          return
+        }
+
+        void loadProfile().finally(() => {
+          if (mounted) setLoading(false)
+        })
+      }, 0)
     })
 
     return () => {
@@ -109,10 +116,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
 export function useAuth() {
   const context = useContext(AuthContext)
-
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-
+  if (!context) throw new Error('useAuth must be used within an AuthProvider')
   return context
 }
