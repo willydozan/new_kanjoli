@@ -34,18 +34,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     let mounted = true
+    let authVersion = 0
 
     const wait = (ms: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, ms))
 
-    const loadProfile = async () => {
+    const loadProfile = async (version: number) => {
       let lastError: unknown = null
 
       for (let attempt = 1; attempt <= PROFILE_RETRY_COUNT; attempt += 1) {
+        if (!mounted || version !== authVersion) return null
+
         try {
           const currentProfile = await getCurrentUserProfile()
 
-          if (mounted) {
+          if (mounted && version === authVersion) {
             setProfile(currentProfile)
           }
 
@@ -63,11 +66,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       }
 
-      if (mounted) {
+      if (mounted && version === authVersion) {
         setProfile(null)
       }
 
       throw lastError
+    }
+
+    const applySession = async (currentSession: Session | null) => {
+      const version = ++authVersion
+
+      if (!mounted) return
+
+      setSession(currentSession)
+      setProfile(null)
+      setLoading(true)
+
+      if (!currentSession) {
+        setLoading(false)
+        return
+      }
+
+      try {
+        await loadProfile(version)
+      } catch (error) {
+        console.error('Failed to load authenticated user profile:', error)
+      } finally {
+        if (mounted && version === authVersion) {
+          setLoading(false)
+        }
+      }
     }
 
     const initializeAuth = async () => {
@@ -78,23 +106,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         } = await supabase.auth.getSession()
 
         if (error) throw error
-        if (!mounted) return
-
-        setSession(currentSession)
-
-        if (currentSession) {
-          await loadProfile()
-        } else {
-          setProfile(null)
-        }
+        await applySession(currentSession)
       } catch (error) {
         console.error('Failed to initialize authentication:', error)
         if (mounted) {
+          ++authVersion
           setSession(null)
           setProfile(null)
+          setLoading(false)
         }
-      } finally {
-        if (mounted) setLoading(false)
       }
     }
 
@@ -105,26 +125,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       if (!mounted) return
 
-      setSession(currentSession)
-
-      // Do not call Supabase APIs synchronously from this callback.
-      // Supabase may still hold its internal auth lock.
+      // Defer until Supabase's auth callback has released its internal lock.
       setTimeout(() => {
         if (!mounted) return
-
-        if (!currentSession) {
-          setProfile(null)
-          setLoading(false)
-          return
-        }
-
-        void loadProfile()
-          .catch((error) => {
-            console.error('Auth state profile refresh failed:', error)
-          })
-          .finally(() => {
-            if (mounted) setLoading(false)
-          })
+        void applySession(currentSession)
       }, 0)
     })
 
