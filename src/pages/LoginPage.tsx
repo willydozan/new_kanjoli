@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { getCurrentUserProfile } from '../features/auth/auth.service'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -16,7 +17,7 @@ export function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const { error: signInError } =
+    const { data, error: signInError } =
       await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -28,7 +29,34 @@ export function LoginPage() {
       return
     }
 
-    navigate('/', { replace: true })
+    // Do not navigate until the authenticated user's application profile
+    // has been confirmed. This prevents ProtectedRoute from seeing a valid
+    // session while profile is still null and incorrectly redirecting to 403.
+    try {
+      if (!data.session) {
+        throw new Error('Login berhasil tetapi session tidak tersedia.')
+      }
+
+      const profile = await getCurrentUserProfile()
+
+      if (!profile) {
+        throw new Error(
+          'Akun berhasil login, tetapi profil pengguna belum terhubung ke data pegawai dan role.',
+        )
+      }
+
+      navigate('/', { replace: true })
+    } catch (profileError) {
+      console.error('LOGIN PROFILE ERROR:', profileError)
+      await supabase.auth.signOut()
+      setError(
+        profileError instanceof Error
+          ? profileError.message
+          : 'Profil pengguna tidak dapat dimuat.',
+      )
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
