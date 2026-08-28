@@ -121,7 +121,7 @@ export async function createSuratMasuk(
 
   return data
 }
- 
+
 export async function uploadSuratMasukFile(
   documentId: string,
   file: File,
@@ -171,32 +171,6 @@ export async function uploadSuratMasukFile(
     mimeType: file.type,
     fileSize: file.size,
   }
-}
-
-export async function processSuratMasukOCR(
-  documentId: string,
-) {
-  const { data, error } = await supabase.functions.invoke(
-    'surat-ocr',
-    {
-      body: {
-        document_id: documentId,
-      },
-    },
-  )
-
-  if (error) {
-    console.error('SURAT OCR INVOKE ERROR:', error)
-    throw error
-  }
-
-  if (!data?.success) {
-    throw new Error(
-      data?.error || 'Gagal memulai proses OCR.',
-    )
-  }
-
-  return data
 }
 
 export async function processSuratMasukOCR(
