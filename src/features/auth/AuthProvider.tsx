@@ -24,6 +24,9 @@ type AuthProviderProps = {
   children: ReactNode
 }
 
+const PROFILE_RETRY_COUNT = 3
+const PROFILE_RETRY_DELAY_MS = 400
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -32,14 +35,39 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     let mounted = true
 
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms))
+
     const loadProfile = async () => {
-      try {
-        const currentProfile = await getCurrentUserProfile()
-        if (mounted) setProfile(currentProfile)
-      } catch (error) {
-        console.error('Failed to load user profile:', error)
-        if (mounted) setProfile(null)
+      let lastError: unknown = null
+
+      for (let attempt = 1; attempt <= PROFILE_RETRY_COUNT; attempt += 1) {
+        try {
+          const currentProfile = await getCurrentUserProfile()
+
+          if (mounted) {
+            setProfile(currentProfile)
+          }
+
+          return currentProfile
+        } catch (error) {
+          lastError = error
+          console.error(
+            `Failed to load user profile (attempt ${attempt}/${PROFILE_RETRY_COUNT}):`,
+            error,
+          )
+
+          if (attempt < PROFILE_RETRY_COUNT) {
+            await wait(PROFILE_RETRY_DELAY_MS)
+          }
+        }
       }
+
+      if (mounted) {
+        setProfile(null)
+      }
+
+      throw lastError
     }
 
     const initializeAuth = async () => {
@@ -53,6 +81,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!mounted) return
 
         setSession(currentSession)
+
         if (currentSession) {
           await loadProfile()
         } else {
@@ -78,8 +107,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setSession(currentSession)
 
-      // Supabase may still hold its auth lock while this callback runs.
-      // Defer the profile request until the callback has returned.
+      // Do not call Supabase APIs synchronously from this callback.
+      // Supabase may still hold its internal auth lock.
       setTimeout(() => {
         if (!mounted) return
 
@@ -89,9 +118,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return
         }
 
-        void loadProfile().finally(() => {
-          if (mounted) setLoading(false)
-        })
+        void loadProfile()
+          .catch((error) => {
+            console.error('Auth state profile refresh failed:', error)
+          })
+          .finally(() => {
+            if (mounted) setLoading(false)
+          })
       }, 0)
     })
 
