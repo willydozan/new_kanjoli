@@ -1,11 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { getCurrentUserProfile } from '../features/auth/auth.service'
 import { useAuth } from '../features/auth/AuthProvider'
-
-const PROFILE_CHECK_ATTEMPTS = 5
-const PROFILE_CHECK_DELAY_MS = 300
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -19,14 +15,14 @@ export function LoginPage() {
 
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
+  // AuthProvider is the single source of truth for the authenticated
+  // session and application profile. Navigation happens only after both
+  // are ready, preventing the old race that caused "Auth session missing!".
   useEffect(() => {
     if (session && profile && !authLoading) {
       navigate(from, { replace: true })
     }
   }, [session, profile, authLoading, navigate, from])
-
-  const wait = (ms: number) =>
-    new Promise<void>((resolve) => setTimeout(resolve, ms))
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -34,45 +30,20 @@ export function LoginPage() {
     setError(null)
 
     try {
-      const { data, error: signInError } =
-        await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        })
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      })
 
       if (signInError) {
         setError(signInError.message)
         return
       }
 
-      if (!data.session) {
-        setError('Login berhasil tetapi session tidak tersedia. Silakan coba lagi.')
-        return
-      }
-
-      // Verify the complete application identity before navigating.
-      // This prevents the old race where the UI stayed on /login or
-      // redirected to 403 before employee/role loading finished.
-      let currentProfile = null
-
-      for (let attempt = 1; attempt <= PROFILE_CHECK_ATTEMPTS; attempt += 1) {
-        currentProfile = await getCurrentUserProfile()
-
-        if (currentProfile) break
-
-        if (attempt < PROFILE_CHECK_ATTEMPTS) {
-          await wait(PROFILE_CHECK_DELAY_MS)
-        }
-      }
-
-      if (!currentProfile) {
-        setError(
-          'Login berhasil, tetapi profil pengguna belum ditemukan. Pastikan akun sudah terhubung ke data pegawai dan role di database.',
-        )
-        return
-      }
-
-      navigate(from, { replace: true })
+      // Do NOT call getCurrentUserProfile() here.
+      // Supabase's auth state event is handled by AuthProvider, which waits
+      // until the auth callback has released its internal lock, loads the
+      // employee/role profile, and only then allows ProtectedRoute through.
     } catch (signInError) {
       console.error('LOGIN ERROR:', signInError)
       setError(
